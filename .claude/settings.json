@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "terraform": {
+      "type": "stdio",
+      "command": "/usr/local/bin/terraform-mcp-server",
+      "args": ["stdio"]
+    }
+  }
+}
