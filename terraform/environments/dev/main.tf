@@ -16,6 +16,23 @@ module "vpc" {
   flow_log_retention_days = 30
 }
 
+# ─── Dev EC2 Access — IPv6 ingress ───────────────────────────────────────────
+
+data "aws_security_group" "dev_ec2_default" {
+  name   = "default"
+  vpc_id = "vpc-055aeedd081a8d339"
+}
+
+resource "aws_security_group_rule" "dev_machine_ipv6_all_tcp" {
+  description       = "Dev machine IPv6 - all TCP access"
+  type              = "ingress"
+  from_port         = 0
+  to_port           = 65535
+  protocol          = "tcp"
+  ipv6_cidr_blocks  = ["2401:4900:8814:ee83:ddbb:34aa:4faf:6be4/128"]
+  security_group_id = data.aws_security_group.dev_ec2_default.id
+}
+
 module "eks" {
   source = "../../modules/eks"
 
