@@ -15,3 +15,14 @@ module "vpc" {
 
   flow_log_retention_days = 30
 }
+
+module "eks" {
+  source = "../../modules/eks"
+
+  cluster_name        = "intelliops-dev"
+  environment         = "dev"
+  project             = "intelliops"
+  vpc_id              = module.vpc.vpc_id
+  private_subnet_ids  = module.vpc.private_subnet_ids
+  allowed_cidr_blocks = ["172.31.0.0/16"]
+}
