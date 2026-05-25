@@ -8,4 +8,3 @@ opentelemetry-instrumentation-fastapi==0.45b0
 opentelemetry-exporter-otlp-proto-grpc==1.24.0
 opentelemetry-semantic-conventions==0.45b0
 # Mon May 25 21:59:46 UTC 2026
-# pipeline-v3-20260525
