@@ -69,4 +69,9 @@ module "eks" {
   allowed_cidr_blocks = ["172.31.0.0/16"]
 
   endpoint_public_access = true
+
+  node_instance_type = "t3.large"
+  node_min_size      = 2
+  node_max_size      = 6
+  node_desired_size  = 4
 }
