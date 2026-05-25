@@ -128,8 +128,10 @@ jobs:
       contents: read
 
 # ── Stage 6: IaC scan (conditional on terraform changes) ──────────────────────
+# detect-changes is in needs so terraform output is accessible here.
+# Skips cleanly when no terraform files changed.
   iac-scan:
-    needs: [sonarqube]
+    needs: [detect-changes, sonarqube]
     if: needs.sonarqube.result == 'success' && needs.detect-changes.outputs.terraform == 'true'
     uses: ./.github/workflows/_iac-scan.yml
     secrets:
@@ -139,9 +141,12 @@ jobs:
       security-events: write
 
 # ── Stage 7: Docker build → Trivy image scan → Cosign sign → push ─────────────
+# always() is required: without it GitHub auto-skips this job when iac-scan
+# is skipped (its if-condition is never evaluated). always() forces evaluation.
   build-push:
     needs: [detect-changes, sonarqube, iac-scan]
     if: |
+      always() &&
       github.ref == 'refs/heads/main' &&
       needs.detect-changes.outputs.has-service-changes == 'true' &&
       needs.sonarqube.result == 'success' &&
@@ -169,8 +174,10 @@ jobs:
   update-manifests:
     needs: [detect-changes, build-push]
     if: |
+      always() &&
       github.ref == 'refs/heads/main' &&
-      needs.detect-changes.outputs.has-service-changes == 'true'
+      needs.detect-changes.outputs.has-service-changes == 'true' &&
+      needs.build-push.result == 'success'
     strategy:
       fail-fast: false
       matrix:
@@ -192,8 +199,10 @@ jobs:
   argocd-sync:
     needs: [detect-changes, update-manifests]
     if: |
+      always() &&
       github.ref == 'refs/heads/main' &&
-      needs.detect-changes.outputs.has-service-changes == 'true'
+      needs.detect-changes.outputs.has-service-changes == 'true' &&
+      needs.update-manifests.result == 'success'
     uses: ./.github/workflows/_argocd-sync.yml
     with:
       app_name: microservices
@@ -206,8 +215,10 @@ jobs:
   dast:
     needs: [detect-changes, argocd-sync]
     if: |
+      always() &&
       github.ref == 'refs/heads/main' &&
-      needs.detect-changes.outputs.has-service-changes == 'true'
+      needs.detect-changes.outputs.has-service-changes == 'true' &&
+      needs.argocd-sync.result == 'success'
     uses: ./.github/workflows/_dast-scan.yml
     with:
       target_url: https://apps.infrastructurepath.online
