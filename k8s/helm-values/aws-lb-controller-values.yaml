@@ -10,5 +10,9 @@ serviceAccount:
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::007066145518:role/intelliops-dev-alb-controller-role
 
-# Let the controller add/remove SG rules on nodes so ALB can reach pods directly (target-type: ip)
-enableBackendSecurityGroup: true
+# enableManageBackendSecurityGroupRules is disabled: the node ENI has two cluster-tagged SGs
+# (our custom node SG + EKS-managed cluster SG), which causes the controller to error with
+# "expected exactly one securityGroup tagged with kubernetes.io/cluster/<name>".
+# ALB-to-pod connectivity is handled by aws_security_group_rule.node_ingress_vpc in
+# terraform/modules/eks/main.tf (VPC CIDR rule — no bootstrapping dependency on ALB SG ID).
+enableManageBackendSecurityGroupRules: false

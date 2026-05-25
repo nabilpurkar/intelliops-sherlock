@@ -80,11 +80,6 @@ variable "allowed_ipv6_cidr_blocks" {
   default     = []
 }
 
-variable "alb_security_group_id" {
-  description = "Security group ID of the ALB created by the AWS Load Balancer Controller — allows inbound to nodes for target-type: ip"
-  type        = string
-  default     = ""
-}
 
 variable "endpoint_public_access" {
   description = "Enable public endpoint for the EKS API server — set true for dev, false for prod"
