@@ -20,7 +20,8 @@ postgresql:
   enabled: false
 
 jdbcOverwrite:
-  enable: true
+  enabled: true
   jdbcUrl: jdbc:postgresql://postgresql.database.svc.cluster.local:5432/sonarqube
   jdbcUsername: sonarqube
-  # jdbcPassword injected at install time via --set from AWS Secrets Manager
+  jdbcSecretName: postgresql-credentials
+  jdbcSecretPasswordKey: sonarqube-password

@@ -56,31 +56,14 @@ info "Cluster reachable"
 info "Charts dir : ${CHARTS}"
 info "Values dir : ${VALUES}"
 
-# ─── Fetch secrets from AWS Secrets Manager ───────────────────────────────────
-step "Fetching credentials from AWS Secrets Manager"
-
-PG_JSON=$(aws secretsmanager get-secret-value \
-  --secret-id intelliops/dev/postgresql \
-  --query SecretString --output text)
-
-GRAFANA_JSON=$(aws secretsmanager get-secret-value \
-  --secret-id intelliops/dev/grafana \
-  --query SecretString --output text)
-
-PG_PASS=$(echo "${PG_JSON}"     | python3 -c "import sys,json; print(json.load(sys.stdin)['postgres_password'])")
-SONAR_PASS=$(echo "${PG_JSON}"  | python3 -c "import sys,json; print(json.load(sys.stdin)['sonarqube_password'])")
-DOJO_PASS=$(echo "${PG_JSON}"   | python3 -c "import sys,json; print(json.load(sys.stdin)['defectdojo_password'])")
-KONG_PASS=$(echo "${PG_JSON}"   | python3 -c "import sys,json; print(json.load(sys.stdin)['kong_password'])")
-GRAFANA_PASS=$(echo "${GRAFANA_JSON}" | python3 -c "import sys,json; print(json.load(sys.stdin)['admin_password'])")
-
-success "All credentials fetched"
-
 # ─── Pre-create namespaces ────────────────────────────────────────────────────
+# Namespaces must exist before ExternalSecrets are applied so ESO can sync
+# secrets into them immediately without waiting for Helm --create-namespace.
 step "Pre-creating namespaces"
 
 for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco; do
   if kubectl get namespace "${ns}" &>/dev/null; then
-    warn "Namespace ${ns} already exists — skipping"
+    warn "Namespace ${ns} already exists"
   else
     kubectl create namespace "${ns}"
     success "Created namespace: ${ns}"
@@ -108,52 +91,15 @@ kubectl apply -f "${MANIFESTS}/secret-store.yaml"
 
 info "Applying ExternalSecrets ..."
 kubectl apply -f "${MANIFESTS}/postgresql-secret.yaml"
+kubectl apply -f "${MANIFESTS}/postgresql-initdb-secret.yaml"
 kubectl apply -f "${MANIFESTS}/grafana-secret.yaml"
 kubectl apply -f "${MANIFESTS}/argocd-secret.yaml"
 
-info "Waiting 45 s for secrets to sync from AWS Secrets Manager ..."
-sleep 45
+info "Waiting 60 s for secrets to sync from AWS Secrets Manager ..."
+sleep 60
 
 info "Checking ExternalSecret status ..."
 kubectl get externalsecret -A 2>/dev/null || true
-
-# ─── 3b. Create postgresql-initdb-scripts secret ─────────────────────────────
-step "3b/15  postgresql initdb scripts secret"
-
-if kubectl get secret postgresql-initdb-scripts -n database &>/dev/null; then
-  warn "postgresql-initdb-scripts already exists — skipping"
-else
-  info "Creating postgresql-initdb-scripts secret with actual DB passwords ..."
-  kubectl create secret generic postgresql-initdb-scripts \
-    --namespace database \
-    --from-literal=init.sql="$(cat <<SQL
-CREATE DATABASE IF NOT EXISTS sonarqube;
-DO \$\$ BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sonarqube') THEN
-    CREATE USER sonarqube WITH PASSWORD '${SONAR_PASS}';
-  END IF;
-END \$\$;
-GRANT ALL PRIVILEGES ON DATABASE sonarqube TO sonarqube;
-
-CREATE DATABASE IF NOT EXISTS defectdojo;
-DO \$\$ BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'defectdojo') THEN
-    CREATE USER defectdojo WITH PASSWORD '${DOJO_PASS}';
-  END IF;
-END \$\$;
-GRANT ALL PRIVILEGES ON DATABASE defectdojo TO defectdojo;
-
-CREATE DATABASE IF NOT EXISTS kong;
-DO \$\$ BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kong') THEN
-    CREATE USER kong WITH PASSWORD '${KONG_PASS}';
-  END IF;
-END \$\$;
-GRANT ALL PRIVILEGES ON DATABASE kong TO kong;
-SQL
-)"
-  success "postgresql-initdb-scripts secret created"
-fi
 
 # ─── 4. postgresql ────────────────────────────────────────────────────────────
 step "4/15  postgresql"
@@ -173,27 +119,29 @@ helm_install linkerd-crds linkerd \
   "${CHARTS}/linkerd-crds"
 
 # ─── 6b. linkerd-identity-issuer secret ──────────────────────────────────────
+# Linkerd reads issuer certs from a pre-existing k8s TLS secret.
+# Certs are stored in Secrets Manager (intelliops/dev/linkerd) as base64 fields.
 step "6b/15  linkerd-identity-issuer secret"
 
-LINKERD_ISSUER_SECRET="linkerd-identity-issuer"
-
-if kubectl get secret "${LINKERD_ISSUER_SECRET}" -n linkerd &>/dev/null; then
-  warn "${LINKERD_ISSUER_SECRET} already exists in linkerd — skipping"
+if kubectl get secret linkerd-identity-issuer -n linkerd &>/dev/null; then
+  warn "linkerd-identity-issuer already exists — skipping"
 else
-  info "Fetching Linkerd certs from AWS Secrets Manager ..."
+  info "Fetching Linkerd issuer certs from AWS Secrets Manager ..."
   LINKERD_JSON=$(aws secretsmanager get-secret-value \
     --secret-id intelliops/dev/linkerd \
     --query SecretString --output text)
 
-  ISSUER_CRT=$(echo "${LINKERD_JSON}" | python3 -c "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_crt']).decode())")
-  ISSUER_KEY=$(echo "${LINKERD_JSON}" | python3 -c "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_key']).decode())")
+  ISSUER_CRT=$(echo "${LINKERD_JSON}" | python3 -c \
+    "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_crt']).decode())")
+  ISSUER_KEY=$(echo "${LINKERD_JSON}" | python3 -c \
+    "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_key']).decode())")
 
-  kubectl create secret tls "${LINKERD_ISSUER_SECRET}" \
+  kubectl create secret tls linkerd-identity-issuer \
     --namespace linkerd \
     --cert=<(echo "${ISSUER_CRT}") \
     --key=<(echo "${ISSUER_KEY}")
 
-  success "${LINKERD_ISSUER_SECRET} created in linkerd"
+  success "linkerd-identity-issuer created"
 fi
 
 # ─── 7. linkerd-control-plane ────────────────────────────────────────────────
@@ -213,7 +161,6 @@ step "9/15  kube-prometheus-stack"
 helm_install kube-prometheus-stack monitoring \
   "${CHARTS}/kube-prometheus-stack" \
   -f "${VALUES}/kube-prometheus-values.yaml" \
-  --set grafana.adminPassword="${GRAFANA_PASS}" \
   --timeout 10m
 
 # ─── 10. loki ────────────────────────────────────────────────────────────────
@@ -238,8 +185,7 @@ helm_install otel-collector monitoring \
 step "13/15  kong"
 helm_install kong kong \
   "${CHARTS}/kong" \
-  -f "${VALUES}/kong-values.yaml" \
-  --set "env.pg_password=${KONG_PASS}"
+  -f "${VALUES}/kong-values.yaml"
 
 # ─── 14. falco ───────────────────────────────────────────────────────────────
 step "14/15  falco"
@@ -252,7 +198,6 @@ step "15/15  sonarqube"
 helm_install sonarqube sonarqube \
   "${CHARTS}/sonarqube" \
   -f "${VALUES}/sonarqube-values.yaml" \
-  --set "jdbcOverwrite.jdbcPassword=${SONAR_PASS}" \
   --timeout 10m
 
 # ─── Verify ───────────────────────────────────────────────────────────────────
@@ -272,7 +217,7 @@ helm list -A --no-headers \
   | sort
 
 echo ""
-info "ArgoCD initial admin password (if auto-generated):"
+info "ArgoCD initial admin password:"
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" 2>/dev/null | base64 -d && echo || true
 

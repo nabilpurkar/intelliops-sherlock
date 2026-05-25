@@ -2,7 +2,10 @@
 # install: helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --version 85.3.3 -n monitoring --create-namespace -f kube-prometheus-values.yaml
 
 grafana:
-  # Password injected at install time via --set grafana.adminPassword from AWS Secrets Manager
+  admin:
+    existingSecret: grafana-credentials
+    userKey: admin-user
+    passwordKey: admin-password
   ingress:
     enabled: false
 
