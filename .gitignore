@@ -7,6 +7,9 @@
 terraform.tfvars
 override.tf
 
+# Generated credentials file — contains tokens, never commit
+INSTRUCTIONS.md
+
 # Secrets — kabhi commit mat karna
 secrets.tf
 *.pem

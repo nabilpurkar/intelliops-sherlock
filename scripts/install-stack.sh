@@ -335,3 +335,10 @@ kubectl get ingress kong-gateway -n kong \
 
 echo ""
 success "Stack installation complete"
+
+# ─── Auto-configure apps ──────────────────────────────────────────────────────
+echo ""
+info "Running configure-stack.sh to set up SonarQube, DefectDojo, ArgoCD, Grafana ..."
+info "(Pass GITHUB_PAT=ghp_xxx to also push GitHub secrets automatically)"
+echo ""
+exec "${REPO_ROOT}/scripts/configure-stack.sh"
