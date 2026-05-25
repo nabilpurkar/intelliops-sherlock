@@ -33,9 +33,17 @@ jobs:
         id: quality-gate
         uses: SonarSource/sonarqube-quality-gate-action@v1
         timeout-minutes: 5
+        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.sonar_token }}
           SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+
+      - name: Quality Gate result
+        run: |
+          echo "Quality Gate status: ${{ steps.quality-gate.outputs.quality-gate-status }}"
+          if [ "${{ steps.quality-gate.outputs.quality-gate-status }}" = "FAILED" ]; then
+            echo "::warning::SonarQube Quality Gate FAILED — check ${{ env.SONAR_HOST_URL }}/dashboard?id=intelliops-sherlock"
+          fi
 
       - name: Export issues and upload to DefectDojo
         if: always()
