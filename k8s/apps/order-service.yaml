@@ -35,7 +35,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: order-service
-          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/order-service:aff99d8f2e3a41eb49201a6f4cc2825fc2689763
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/order-service:88144e2d1d5da985c04fab1e3de5a826ef097700
           imagePullPolicy: Always
           ports:
             - name: http
