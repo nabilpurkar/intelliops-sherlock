@@ -82,11 +82,14 @@ wait_for_url() {
   local name=$1 url=$2 max=${3:-60} delay=${4:-10}
   info "Waiting for ${name} to become ready ..."
   for i in $(seq 1 "${max}"); do
-    if curl -sfk --max-time 5 "${url}" >/dev/null 2>&1; then
-      success "${name} is ready"
+    local code
+    code=$(curl -sk --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || echo "000")
+    # Accept any response except connection-refused (000) or gateway errors (502/503)
+    if [ "${code}" != "000" ] && [ "${code}" != "502" ] && [ "${code}" != "503" ]; then
+      success "${name} is ready (HTTP ${code})"
       return 0
     fi
-    printf "    [%02d/%02d] not ready — sleeping %ds\n" "${i}" "${max}" "${delay}"
+    printf "    [%02d/%02d] not ready (HTTP %s) — sleeping %ds\n" "${i}" "${max}" "${code}" "${delay}"
     sleep "${delay}"
   done
   die "${name} did not respond after $((max * delay))s"
@@ -367,7 +370,7 @@ else
   kubectl apply -f "${REPO_ROOT}/k8s/argocd/locust-app.yaml"
   success "ArgoCD Applications registered"
 
-  wait_for_url "ArgoCD API" "${ARGOCD_URL}/api/v1/applications" 30 10
+  wait_for_url "ArgoCD API" "${ARGOCD_URL}/api/v1/session" 30 10
 
   ARGOCD_AUTH_TOKEN=$(curl -sf -X POST "${ARGOCD_URL}/api/v1/session" \
     -H "Content-Type: application/json" \
