@@ -1,0 +1,54 @@
+name: SAST - Semgrep
+
+on:
+  workflow_call:
+    secrets:
+      defectdojo_api_key:
+        required: false
+
+env:
+  DEFECTDOJO_URL: https://defectdojo.infrastructurepath.online
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep SAST scan
+        run: |
+          semgrep scan \
+            --config=auto \
+            --sarif \
+            --output=semgrep.sarif \
+            --exclude="**/.terraform/**" \
+            . || true
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      - name: Upload to DefectDojo
+        if: always()
+        env:
+          DEFECTDOJO_API_KEY: ${{ secrets.defectdojo_api_key }}
+        run: |
+          [ -z "${DEFECTDOJO_API_KEY}" ] && exit 0
+          curl -sf -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=SARIF" \
+            -F "file=@semgrep.sarif" \
+            -F "product_name=IntelliOps Sherlock" \
+            -F "engagement_name=CI Pipeline - Semgrep" \
+            -F "auto_create_context=true" \
+            -F "active=true" \
+            -F "verified=false" \
+            -F "branch_tag=${{ github.sha }}" || true

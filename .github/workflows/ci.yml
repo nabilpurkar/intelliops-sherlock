@@ -1,5 +1,23 @@
 name: CI
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Pipeline sequence (each stage gates the next):
+#
+#   detect-changes
+#     → gitleaks          (secret scanning — always runs)
+#     → sast              (Semgrep SAST — always runs)
+#     → unit-tests        (pytest — runs when service files changed)
+#     → sca               (Trivy FS + OWASP Dep-Check — always runs)
+#     → sonarqube         (code quality gate — always runs)
+#     → iac-scan          (Checkov — runs when terraform files changed)
+#     → build-push        (Docker build + Trivy image + Cosign + push — main only)
+#     → update-manifests  (bump image tag in k8s manifests — main only)
+#     → dast              (OWASP ZAP baseline — main only)
+#
+# Runtime security (Falco → DefectDojo) and observability (Prometheus/Grafana)
+# run continuously in-cluster and are not modelled as pipeline stages here.
+# ─────────────────────────────────────────────────────────────────────────────
+
 on:
   push:
     branches: [main]
@@ -15,6 +33,7 @@ permissions:
   id-token: write
   security-events: write
 
+# ── Stage 0: change detection ─────────────────────────────────────────────────
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
@@ -43,37 +62,89 @@ jobs:
       - id: build-matrix
         run: |
           services=()
-          [[ "${{ steps.filter.outputs.order-service }}" == "true" ]] && services+=("order-service")
-          [[ "${{ steps.filter.outputs.payment-service }}" == "true" ]] && services+=("payment-service")
+          [[ "${{ steps.filter.outputs.order-service }}"     == "true" ]] && services+=("order-service")
+          [[ "${{ steps.filter.outputs.payment-service }}"   == "true" ]] && services+=("payment-service")
           [[ "${{ steps.filter.outputs.inventory-service }}" == "true" ]] && services+=("inventory-service")
-          [[ "${{ steps.filter.outputs.load-generator }}" == "true" ]] && services+=("load-generator")
+          [[ "${{ steps.filter.outputs.load-generator }}"    == "true" ]] && services+=("load-generator")
 
           if [ ${#services[@]} -eq 0 ]; then
-            echo 'services=[]' >> "$GITHUB_OUTPUT"
+            echo 'services=[]'      >> "$GITHUB_OUTPUT"
             echo 'has-changes=false' >> "$GITHUB_OUTPUT"
           else
             json=$(printf '"%s",' "${services[@]}" | sed 's/,$//')
             echo "services=[${json}]" >> "$GITHUB_OUTPUT"
-            echo 'has-changes=true' >> "$GITHUB_OUTPUT"
+            echo 'has-changes=true'  >> "$GITHUB_OUTPUT"
           fi
 
-  security-scan:
-    needs: detect-changes
-    uses: ./.github/workflows/_security-scan.yml
-    with:
-      terraform_changed: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+# ── Stage 1: secret scanning ───────────────────────────────────────────────────
+  gitleaks:
+    needs: [detect-changes]
+    uses: ./.github/workflows/_gitleaks.yml
+    permissions:
+      contents: read
+
+# ── Stage 2: SAST ─────────────────────────────────────────────────────────────
+  sast:
+    needs: [gitleaks]
+    uses: ./.github/workflows/_sast.yml
     secrets:
-      sonar_token: ${{ secrets.SONAR_TOKEN }}
       defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
     permissions:
       contents: read
       security-events: write
 
+# ── Stage 3: unit tests ────────────────────────────────────────────────────────
+# Runs only when service source code changed. If skipped, sca still proceeds.
+  unit-tests:
+    needs: [sast]
+    if: needs.detect-changes.outputs.has-service-changes == 'true'
+    uses: ./.github/workflows/_unit-tests.yml
+    permissions:
+      contents: read
+
+# ── Stage 4: SCA (Trivy FS + OWASP Dependency-Check) ─────────────────────────
+# Runs after unit-tests. If unit-tests were skipped (no service changes) this
+# still runs. If unit-tests FAILED this is blocked (intentional gate).
+  sca:
+    needs: [unit-tests]
+    if: always() && (needs.unit-tests.result == 'success' || needs.unit-tests.result == 'skipped')
+    uses: ./.github/workflows/_sca.yml
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      contents: read
+      security-events: write
+
+# ── Stage 5: code quality gate ────────────────────────────────────────────────
+  sonarqube:
+    needs: [sca]
+    if: needs.sca.result == 'success'
+    uses: ./.github/workflows/_sonarqube.yml
+    secrets:
+      sonar_token: ${{ secrets.SONAR_TOKEN }}
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      contents: read
+
+# ── Stage 6: IaC scan (conditional on terraform changes) ──────────────────────
+  iac-scan:
+    needs: [sonarqube]
+    if: needs.sonarqube.result == 'success' && needs.detect-changes.outputs.terraform == 'true'
+    uses: ./.github/workflows/_iac-scan.yml
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      contents: read
+      security-events: write
+
+# ── Stage 7: Docker build → Trivy image scan → Cosign sign → push ─────────────
   build-push:
-    needs: [detect-changes, security-scan]
+    needs: [detect-changes, sonarqube, iac-scan]
     if: |
       github.ref == 'refs/heads/main' &&
-      needs.detect-changes.outputs.has-service-changes == 'true'
+      needs.detect-changes.outputs.has-service-changes == 'true' &&
+      needs.sonarqube.result == 'success' &&
+      (needs.iac-scan.result == 'success' || needs.iac-scan.result == 'skipped')
     strategy:
       fail-fast: false
       matrix:
@@ -93,6 +164,7 @@ jobs:
       security-events: write
       packages: write
 
+# ── Stage 8: update k8s manifests (GitOps tag bump) ───────────────────────────
   update-manifests:
     needs: [detect-changes, build-push]
     if: |
@@ -111,6 +183,7 @@ jobs:
     permissions:
       contents: write
 
+# ── Stage 9: DAST ─────────────────────────────────────────────────────────────
   dast:
     needs: [detect-changes, update-manifests]
     if: |

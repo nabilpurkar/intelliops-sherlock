@@ -1,0 +1,61 @@
+name: SonarQube - Code Quality
+
+on:
+  workflow_call:
+    secrets:
+      sonar_token:
+        required: false
+      defectdojo_api_key:
+        required: false
+
+env:
+  DEFECTDOJO_URL: https://defectdojo.infrastructurepath.online
+  SONAR_HOST_URL: https://sonarqube.infrastructurepath.online
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.sonar_token }}
+          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+
+      - name: Quality Gate check
+        id: quality-gate
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.sonar_token }}
+          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+
+      - name: Export issues and upload to DefectDojo
+        if: always()
+        env:
+          SONAR_TOKEN: ${{ secrets.sonar_token }}
+          DEFECTDOJO_API_KEY: ${{ secrets.defectdojo_api_key }}
+        run: |
+          [ -z "${SONAR_TOKEN}" ] || \
+            curl -sf -u "${SONAR_TOKEN}:" \
+              "${SONAR_HOST_URL}/api/issues/search?componentKeys=intelliops-sherlock&ps=500&resolved=false" \
+              -o sonar-issues.json || true
+          [ -z "${DEFECTDOJO_API_KEY}" ] && exit 0
+          [ -f sonar-issues.json ] || exit 0
+          curl -sf -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=SonarQube Scan" \
+            -F "file=@sonar-issues.json" \
+            -F "product_name=IntelliOps Sherlock" \
+            -F "engagement_name=CI Pipeline - SonarQube" \
+            -F "auto_create_context=true" \
+            -F "active=true" \
+            -F "verified=false" \
+            -F "branch_tag=${{ github.sha }}" || true
