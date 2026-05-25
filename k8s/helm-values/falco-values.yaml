@@ -8,6 +8,8 @@ falcosidekick:
   enabled: true
   webui:
     enabled: true
+    redis:
+      storageClass: gp2
 
 collectors:
   kubernetes:

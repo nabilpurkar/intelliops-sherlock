@@ -8,12 +8,9 @@ auth:
     adminPasswordKey: postgres-password
   database: postgres
 
-# initdb SQL with real passwords is injected at install time by scripts/install-stack.sh
-# via a k8s Secret (postgresql-initdb-scripts) fetched from AWS Secrets Manager.
-initdb:
-  scriptsSecret: postgresql-initdb-scripts
-
 primary:
+  initdb:
+    scriptsSecret: postgresql-initdb-scripts
   persistence:
     enabled: true
     size: 10Gi

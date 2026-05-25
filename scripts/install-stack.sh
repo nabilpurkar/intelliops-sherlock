@@ -86,6 +86,15 @@ helm_install external-secrets external-secrets \
 # ─── 3. ExternalSecret manifests + wait for sync ─────────────────────────────
 step "3/15  Apply ExternalSecret manifests"
 
+info "Waiting for ESO CRDs to be established ..."
+kubectl wait --for condition=established --timeout=60s \
+  crd/clustersecretstores.external-secrets.io \
+  crd/externalsecrets.external-secrets.io
+
+info "Refreshing kubectl API discovery cache ..."
+kubectl api-resources --api-group=external-secrets.io > /dev/null 2>&1 || true
+sleep 5
+
 info "Applying ClusterSecretStore ..."
 kubectl apply -f "${MANIFESTS}/secret-store.yaml"
 
@@ -94,6 +103,8 @@ kubectl apply -f "${MANIFESTS}/postgresql-secret.yaml"
 kubectl apply -f "${MANIFESTS}/postgresql-initdb-secret.yaml"
 kubectl apply -f "${MANIFESTS}/grafana-secret.yaml"
 kubectl apply -f "${MANIFESTS}/argocd-secret.yaml"
+kubectl apply -f "${MANIFESTS}/kong-secret.yaml"
+kubectl apply -f "${MANIFESTS}/sonarqube-secret.yaml"
 
 info "Waiting 60 s for secrets to sync from AWS Secrets Manager ..."
 sleep 60

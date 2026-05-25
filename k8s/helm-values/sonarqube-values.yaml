@@ -2,6 +2,11 @@
 # install: helm upgrade --install sonarqube sonarqube/sonarqube -n sonarqube --create-namespace -f sonarqube-values.yaml
 # Prerequisite: postgresql must be running in the database namespace.
 
+community:
+  enabled: true
+
+monitoringPasscode: "intelliops-monitoring-2026"
+
 persistence:
   enabled: false
 

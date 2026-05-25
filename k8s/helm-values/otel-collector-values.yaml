@@ -3,6 +3,9 @@
 
 mode: deployment
 
+image:
+  repository: otel/opentelemetry-collector-contrib
+
 config:
   receivers:
     otlp:
@@ -15,8 +18,10 @@ config:
   exporters:
     prometheus:
       endpoint: 0.0.0.0:8889
-    loki:
-      endpoint: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+    otlphttp/loki:
+      endpoint: http://loki.monitoring.svc.cluster.local:3100/otlp
+      tls:
+        insecure: true
     otlp/tempo:
       endpoint: http://tempo.monitoring.svc.cluster.local:4317
       tls:
@@ -29,7 +34,7 @@ config:
         exporters: [prometheus]
       logs:
         receivers: [otlp]
-        exporters: [loki]
+        exporters: [otlphttp/loki]
       traces:
         receivers: [otlp]
         exporters: [otlp/tempo]
