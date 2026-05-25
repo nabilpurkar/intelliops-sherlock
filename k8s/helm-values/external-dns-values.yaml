@@ -1,0 +1,31 @@
+# chart: external-dns/external-dns version 1.21.1
+# install: helm upgrade --install external-dns k8s/helm-charts/external-dns -n external-dns --create-namespace -f k8s/helm-values/external-dns-values.yaml
+
+provider: aws
+
+aws:
+  region: us-east-1
+  zoneType: public
+
+domainFilters:
+  - infrastructurepath.online
+
+txtOwnerId: intelliops-dev
+
+serviceAccount:
+  create: true
+  name: external-dns
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::007066145518:role/intelliops-dev-external-dns-role
+
+policy: sync
+
+logLevel: info
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi

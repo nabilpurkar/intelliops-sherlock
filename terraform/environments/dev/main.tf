@@ -61,6 +61,7 @@ module "iam" {
   eks_oidc_provider_arn = module.eks.oidc_provider_arn
   eks_oidc_provider_url = module.eks.oidc_provider_url
   cluster_name          = module.eks.cluster_name
+  route53_zone_id       = "Z09505612LJLVLH4DJD2G"
 }
 
 module "secrets" {

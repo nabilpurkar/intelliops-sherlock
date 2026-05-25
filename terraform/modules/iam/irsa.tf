@@ -195,3 +195,125 @@ resource "aws_iam_role_policy" "cert_manager" {
     ]
   })
 }
+
+# ─── ExternalDNS ──────────────────────────────────────────────────────────────
+
+resource "aws_iam_role" "external_dns" {
+  count = var.eks_oidc_provider_arn != "" ? 1 : 0
+
+  name = "${var.cluster_name}-external-dns-role"
+
+  assume_role_policy = jsonencode(merge(local.irsa_trust, {
+    Statement = [
+      merge(local.irsa_trust.Statement[0], {
+        Condition = {
+          StringEquals = {
+            "${var.eks_oidc_provider_url}:aud" = "sts.amazonaws.com"
+            "${var.eks_oidc_provider_url}:sub" = "system:serviceaccount:external-dns:external-dns"
+          }
+        }
+      })
+    ]
+  }))
+
+  tags = merge(local.common_tags, { Name = "${var.cluster_name}-external-dns-role" })
+}
+
+resource "aws_iam_role_policy" "external_dns" {
+  #checkov:skip=CKV_AWS_355: Route53 zone listing requires wildcard — ChangeResourceRecordSets scoped to specific hosted zone
+  count = var.eks_oidc_provider_arn != "" ? 1 : 0
+
+  name = "external-dns-route53-policy"
+  role = aws_iam_role.external_dns[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "Route53Changes"
+        Effect   = "Allow"
+        Action   = ["route53:ChangeResourceRecordSets"]
+        Resource = "arn:aws:route53:::hostedzone/${var.route53_zone_id}"
+      },
+      {
+        Sid    = "Route53List"
+        Effect = "Allow"
+        Action = [
+          "route53:ListHostedZones",
+          "route53:ListResourceRecordSets",
+          "route53:ListTagsForResource",
+        ]
+        Resource = "*"
+      },
+    ]
+  })
+}
+
+# ─── Cluster Autoscaler ───────────────────────────────────────────────────────
+
+resource "aws_iam_role" "cluster_autoscaler" {
+  count = var.eks_oidc_provider_arn != "" ? 1 : 0
+
+  name = "${var.cluster_name}-cluster-autoscaler-role"
+
+  assume_role_policy = jsonencode(merge(local.irsa_trust, {
+    Statement = [
+      merge(local.irsa_trust.Statement[0], {
+        Condition = {
+          StringEquals = {
+            "${var.eks_oidc_provider_url}:aud" = "sts.amazonaws.com"
+            "${var.eks_oidc_provider_url}:sub" = "system:serviceaccount:kube-system:cluster-autoscaler"
+          }
+        }
+      })
+    ]
+  }))
+
+  tags = merge(local.common_tags, { Name = "${var.cluster_name}-cluster-autoscaler-role" })
+}
+
+resource "aws_iam_role_policy" "cluster_autoscaler" {
+  #checkov:skip=CKV_AWS_355: autoscaling:Describe* requires wildcard — no resource-level scoping available
+  count = var.eks_oidc_provider_arn != "" ? 1 : 0
+
+  name = "cluster-autoscaler-policy"
+  role = aws_iam_role.cluster_autoscaler[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AutoscalerDescribe"
+        Effect = "Allow"
+        Action = [
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:DescribeScalingActivities",
+          "autoscaling:DescribeTags",
+          "ec2:DescribeImages",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeLaunchTemplateVersions",
+          "ec2:GetInstanceTypesFromInstanceRequirements",
+          "eks:DescribeNodegroup",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "AutoscalerModify"
+        Effect = "Allow"
+        Action = [
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "autoscaling:ResourceTag/k8s.io/cluster-autoscaler/enabled"             = "true"
+            "autoscaling:ResourceTag/k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
+          }
+        }
+      },
+    ]
+  })
+}

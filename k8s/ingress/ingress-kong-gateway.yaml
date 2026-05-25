@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kong-gateway
+  namespace: kong
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:007066145518:certificate/8f1d859b-5bdf-420d-a286-2bf7ea3ec3ef
+    alb.ingress.kubernetes.io/group.name: intelliops-alb
+    external-dns.alpha.kubernetes.io/hostname: "*.infrastructurepath.online"
+spec:
+  rules:
+    - host: "*.infrastructurepath.online"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kong-kong-proxy
+                port:
+                  number: 80

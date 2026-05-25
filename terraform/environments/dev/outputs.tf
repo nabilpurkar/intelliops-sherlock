@@ -50,6 +50,16 @@ output "irsa_cert_manager_role_arn" {
   value       = module.iam.cert_manager_role_arn
 }
 
+output "irsa_external_dns_role_arn" {
+  description = "IRSA role ARN for ExternalDNS — paste into external-dns-values.yaml"
+  value       = module.iam.external_dns_role_arn
+}
+
+output "irsa_cluster_autoscaler_role_arn" {
+  description = "IRSA role ARN for Cluster Autoscaler — paste into cluster-autoscaler-values.yaml"
+  value       = module.iam.cluster_autoscaler_role_arn
+}
+
 output "github_actions_role_arn" {
   description = "GitHub Actions OIDC role ARN — configured in ci.yml"
   value       = module.iam.role_arn

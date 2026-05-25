@@ -63,3 +63,9 @@ variable "cluster_name" {
   type        = string
   default     = ""
 }
+
+variable "route53_zone_id" {
+  description = "Route53 hosted zone ID for ExternalDNS — scopes ChangeResourceRecordSets permission"
+  type        = string
+  default     = ""
+}

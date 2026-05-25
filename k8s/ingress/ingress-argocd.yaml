@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd
+  namespace: argocd
+  annotations:
+    konghq.com/strip-path: "false"
+    konghq.com/protocols: https
+    konghq.com/https-redirect-status-code: "301"
+spec:
+  ingressClassName: kong
+  rules:
+    - host: argocd.infrastructurepath.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80

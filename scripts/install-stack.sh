@@ -22,6 +22,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHARTS="${REPO_ROOT}/k8s/helm-charts"
 VALUES="${REPO_ROOT}/k8s/helm-values"
 MANIFESTS="${REPO_ROOT}/k8s/external-secrets"
+INGRESS="${REPO_ROOT}/k8s/ingress"
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 helm_install() {
@@ -61,7 +62,7 @@ info "Values dir : ${VALUES}"
 # secrets into them immediately without waiting for Helm --create-namespace.
 step "Pre-creating namespaces"
 
-for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco; do
+for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco external-dns; do
   if kubectl get namespace "${ns}" &>/dev/null; then
     warn "Namespace ${ns} already exists"
   else
@@ -71,20 +72,20 @@ for ns in cert-manager external-secrets linkerd database monitoring argocd kong 
 done
 
 # ─── 1. cert-manager ──────────────────────────────────────────────────────────
-step "1/15  cert-manager"
+step "1/18  cert-manager"
 helm_install cert-manager cert-manager \
   "${CHARTS}/cert-manager" \
   -f "${VALUES}/cert-manager-values.yaml" \
   --set installCRDs=true
 
 # ─── 2. external-secrets ──────────────────────────────────────────────────────
-step "2/15  external-secrets"
+step "2/18  external-secrets"
 helm_install external-secrets external-secrets \
   "${CHARTS}/external-secrets" \
   -f "${VALUES}/external-secrets-values.yaml"
 
 # ─── 3. ExternalSecret manifests + wait for sync ─────────────────────────────
-step "3/15  Apply ExternalSecret manifests"
+step "3/18  Apply ExternalSecret manifests"
 
 info "Waiting for ESO CRDs to be established ..."
 kubectl wait --for condition=established --timeout=60s \
@@ -113,26 +114,44 @@ info "Checking ExternalSecret status ..."
 kubectl get externalsecret -A 2>/dev/null || true
 
 # ─── 4. postgresql ────────────────────────────────────────────────────────────
-step "4/15  postgresql"
+step "4/18  postgresql"
 helm_install postgresql database \
   "${CHARTS}/postgresql" \
   -f "${VALUES}/postgresql-values.yaml"
 
 # ─── 5. aws-load-balancer-controller ─────────────────────────────────────────
-step "5/15  aws-load-balancer-controller"
+step "5/18  aws-load-balancer-controller"
 helm_install aws-load-balancer-controller kube-system \
   "${CHARTS}/aws-load-balancer-controller" \
   -f "${VALUES}/aws-lb-controller-values.yaml"
 
-# ─── 6. linkerd-crds ─────────────────────────────────────────────────────────
-step "6/15  linkerd-crds"
+# ─── 6. metrics-server ───────────────────────────────────────────────────────
+step "6/18  metrics-server"
+helm_install metrics-server kube-system \
+  "${CHARTS}/metrics-server" \
+  -f "${VALUES}/metrics-server-values.yaml"
+
+# ─── 7. cluster-autoscaler ───────────────────────────────────────────────────
+step "7/18  cluster-autoscaler"
+helm_install cluster-autoscaler kube-system \
+  "${CHARTS}/cluster-autoscaler" \
+  -f "${VALUES}/cluster-autoscaler-values.yaml"
+
+# ─── 8. external-dns ─────────────────────────────────────────────────────────
+step "8/18  external-dns"
+helm_install external-dns external-dns \
+  "${CHARTS}/external-dns" \
+  -f "${VALUES}/external-dns-values.yaml"
+
+# ─── 9. linkerd-crds ─────────────────────────────────────────────────────────
+step "9/18  linkerd-crds"
 helm_install linkerd-crds linkerd \
   "${CHARTS}/linkerd-crds"
 
-# ─── 6b. linkerd-identity-issuer secret ──────────────────────────────────────
+# ─── 9b. linkerd-identity-issuer secret ──────────────────────────────────────
 # Linkerd reads issuer certs from a pre-existing k8s TLS secret.
 # Certs are stored in Secrets Manager (intelliops/dev/linkerd) as base64 fields.
-step "6b/15  linkerd-identity-issuer secret"
+step "9b/18  linkerd-identity-issuer secret"
 
 if kubectl get secret linkerd-identity-issuer -n linkerd &>/dev/null; then
   warn "linkerd-identity-issuer already exists — skipping"
@@ -155,57 +174,77 @@ else
   success "linkerd-identity-issuer created"
 fi
 
-# ─── 7. linkerd-control-plane ────────────────────────────────────────────────
-step "7/15  linkerd-control-plane"
+# ─── 10. linkerd-control-plane ───────────────────────────────────────────────
+step "10/18  linkerd-control-plane"
 helm_install linkerd-control-plane linkerd \
   "${CHARTS}/linkerd-control-plane" \
   -f "${VALUES}/linkerd-control-plane-values.yaml"
 
-# ─── 8. argocd ───────────────────────────────────────────────────────────────
-step "8/15  argocd"
+# ─── 11. argocd ──────────────────────────────────────────────────────────────
+step "11/18  argocd"
 helm_install argocd argocd \
   "${CHARTS}/argo-cd" \
   -f "${VALUES}/argocd-values.yaml"
 
-# ─── 9. kube-prometheus-stack ────────────────────────────────────────────────
-step "9/15  kube-prometheus-stack"
+# ─── 12. kube-prometheus-stack ───────────────────────────────────────────────
+step "12/18  kube-prometheus-stack"
 helm_install kube-prometheus-stack monitoring \
   "${CHARTS}/kube-prometheus-stack" \
   -f "${VALUES}/kube-prometheus-values.yaml" \
   --timeout 10m
 
-# ─── 10. loki ────────────────────────────────────────────────────────────────
-step "10/15  loki"
+# ─── 13. loki ────────────────────────────────────────────────────────────────
+step "13/18  loki"
 helm_install loki monitoring \
   "${CHARTS}/loki-stack" \
   -f "${VALUES}/loki-values.yaml"
 
-# ─── 11. tempo ───────────────────────────────────────────────────────────────
-step "11/15  tempo"
+# ─── 14. tempo ───────────────────────────────────────────────────────────────
+step "14/18  tempo"
 helm_install tempo monitoring \
   "${CHARTS}/tempo" \
   -f "${VALUES}/tempo-values.yaml"
 
-# ─── 12. otel-collector ──────────────────────────────────────────────────────
-step "12/15  otel-collector"
+# ─── 15. otel-collector ──────────────────────────────────────────────────────
+step "15/18  otel-collector"
 helm_install otel-collector monitoring \
   "${CHARTS}/opentelemetry-collector" \
   -f "${VALUES}/otel-collector-values.yaml"
 
-# ─── 13. kong ────────────────────────────────────────────────────────────────
-step "13/15  kong"
+# ─── 16. kong ────────────────────────────────────────────────────────────────
+step "16/18  kong"
 helm_install kong kong \
   "${CHARTS}/kong" \
   -f "${VALUES}/kong-values.yaml"
 
-# ─── 14. falco ───────────────────────────────────────────────────────────────
-step "14/15  falco"
+# ─── 16b. Kong IngressClass + ingress routes ─────────────────────────────────
+step "16b/18  Kong IngressClass + service ingresses"
+
+info "Applying Kong IngressClass ..."
+kubectl apply -f "${INGRESS}/kong-ingress-class.yaml"
+
+info "Applying ALB gateway ingress (ExternalDNS wildcard) ..."
+kubectl apply -f "${INGRESS}/ingress-kong-gateway.yaml"
+
+info "Applying service ingress routes ..."
+kubectl apply -f "${INGRESS}/ingress-argocd.yaml"
+kubectl apply -f "${INGRESS}/ingress-grafana.yaml"
+kubectl apply -f "${INGRESS}/ingress-prometheus.yaml"
+kubectl apply -f "${INGRESS}/ingress-alertmanager.yaml"
+kubectl apply -f "${INGRESS}/ingress-sonarqube.yaml"
+kubectl apply -f "${INGRESS}/ingress-apps.yaml"
+kubectl apply -f "${INGRESS}/ingress-kong-admin.yaml"
+
+success "IngressClass and all service ingresses applied"
+
+# ─── 17. falco ───────────────────────────────────────────────────────────────
+step "17/18  falco"
 helm_install falco falco \
   "${CHARTS}/falco" \
   -f "${VALUES}/falco-values.yaml"
 
-# ─── 15. sonarqube ───────────────────────────────────────────────────────────
-step "15/15  sonarqube"
+# ─── 18. sonarqube ───────────────────────────────────────────────────────────
+step "18/18  sonarqube"
 helm_install sonarqube sonarqube \
   "${CHARTS}/sonarqube" \
   -f "${VALUES}/sonarqube-values.yaml" \
@@ -231,6 +270,11 @@ echo ""
 info "ArgoCD initial admin password:"
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" 2>/dev/null | base64 -d && echo || true
+
+echo ""
+info "ALB hostname (ExternalDNS will point *.infrastructurepath.online here):"
+kubectl get ingress kong-gateway -n kong \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null && echo || true
 
 echo ""
 success "Stack installation complete"

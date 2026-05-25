@@ -1,0 +1,26 @@
+# chart: autoscaler/cluster-autoscaler version 9.57.0
+# install: helm upgrade --install cluster-autoscaler k8s/helm-charts/cluster-autoscaler -n kube-system -f k8s/helm-values/cluster-autoscaler-values.yaml
+
+autoDiscovery:
+  clusterName: intelliops-dev
+
+awsRegion: us-east-1
+
+rbac:
+  serviceAccount:
+    create: true
+    name: cluster-autoscaler
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::007066145518:role/intelliops-dev-cluster-autoscaler-role
+
+extraArgs:
+  balance-similar-node-groups: true
+  skip-nodes-with-system-pods: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi

@@ -27,3 +27,13 @@ output "cert_manager_role_arn" {
   description = "IRSA role ARN for cert-manager"
   value       = var.eks_oidc_provider_arn != "" ? aws_iam_role.cert_manager[0].arn : ""
 }
+
+output "external_dns_role_arn" {
+  description = "IRSA role ARN for ExternalDNS"
+  value       = var.eks_oidc_provider_arn != "" ? aws_iam_role.external_dns[0].arn : ""
+}
+
+output "cluster_autoscaler_role_arn" {
+  description = "IRSA role ARN for Cluster Autoscaler"
+  value       = var.eks_oidc_provider_arn != "" ? aws_iam_role.cluster_autoscaler[0].arn : ""
+}
