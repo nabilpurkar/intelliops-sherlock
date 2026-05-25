@@ -104,6 +104,35 @@ step "6/15  linkerd-crds"
 helm_install linkerd-crds linkerd \
   "${CHARTS}/linkerd-crds"
 
+# ─── 6b. linkerd-identity-issuer secret ──────────────────────────────────────
+step "6b/15  linkerd-identity-issuer secret"
+
+LINKERD_SECRET_NAME="intelliops/dev/linkerd"
+LINKERD_NS="linkerd"
+ISSUER_SECRET="linkerd-identity-issuer"
+
+if kubectl get secret "${ISSUER_SECRET}" -n "${LINKERD_NS}" &>/dev/null; then
+  warn "${ISSUER_SECRET} already exists in ${LINKERD_NS} — skipping"
+else
+  info "Fetching Linkerd certs from AWS Secrets Manager (${LINKERD_SECRET_NAME}) ..."
+  LINKERD_JSON=$(aws secretsmanager get-secret-value \
+    --secret-id "${LINKERD_SECRET_NAME}" \
+    --query SecretString \
+    --output text)
+
+  ISSUER_CRT=$(echo "${LINKERD_JSON}" | python3 -c "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_crt']).decode())")
+  ISSUER_KEY=$(echo "${LINKERD_JSON}" | python3 -c "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_key']).decode())")
+
+  kubectl create namespace "${LINKERD_NS}" --dry-run=client -o yaml | kubectl apply -f -
+
+  kubectl create secret tls "${ISSUER_SECRET}" \
+    --namespace "${LINKERD_NS}" \
+    --cert=<(echo "${ISSUER_CRT}") \
+    --key=<(echo "${ISSUER_KEY}")
+
+  success "${ISSUER_SECRET} created in ${LINKERD_NS}"
+fi
+
 # ─── 7. linkerd-control-plane ────────────────────────────────────────────────
 step "7/15  linkerd-control-plane"
 helm_install linkerd-control-plane linkerd \

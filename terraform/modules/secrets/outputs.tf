@@ -12,3 +12,8 @@ output "argocd_secret_arn" {
   description = "ARN of the ArgoCD credentials secret"
   value       = aws_secretsmanager_secret.argocd.arn
 }
+
+output "linkerd_secret_arn" {
+  description = "ARN of the Linkerd mTLS certs secret"
+  value       = aws_secretsmanager_secret.linkerd.arn
+}

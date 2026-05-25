@@ -1,14 +1,29 @@
 # chart: linkerd/linkerd-control-plane version 1.16.11
 # install: helm upgrade --install linkerd-control-plane linkerd/linkerd-control-plane --version 1.16.11 -n linkerd --create-namespace -f linkerd-control-plane-values.yaml
-# Prerequisite: trust anchor cert must exist in the cluster as a TLS secret named linkerd-trust-anchor.
-# Generate with: step certificate create root.linkerd.cluster.local ca.crt ca.key --profile root-CA --no-password --insecure
+# Prerequisite: linkerd-crds must be installed first.
+# Certs backed up in AWS Secrets Manager: intelliops/dev/linkerd
+# Trust anchor valid until: 2036-05-22  |  Issuer valid until: 2027-05-25
 
 controllerLogLevel: info
 
-identityTrustAnchorsPEM: PLACEHOLDER_TRUST_ANCHOR
+identityTrustAnchorsPEM: |
+  -----BEGIN CERTIFICATE-----
+  MIIBjTCCATSgAwIBAgIRAIY65EIywn1v3/83XvZh9eowCgYIKoZIzj0EAwIwJTEj
+  MCEGA1UEAxMacm9vdC5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMjYwNTI1MTAy
+  MzQzWhcNMzYwNTIyMTAyMzQzWjAlMSMwIQYDVQQDExpyb290LmxpbmtlcmQuY2x1
+  c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNPHldMIt8Jw3y89
+  6Cpqb1YpDjiXclBaQign3QX8rHuYuhUcT/t3VuoA3oEg5S+jUy3l+VzoPetF/Hp6
+  7dHh4GOjRTBDMA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8ECDAGAQH/AgEBMB0G
+  A1UdDgQWBBSK67ZKRRgqKlyOICXJeLpixnN2ATAKBggqhkjOPQQDAgNHADBEAiAb
+  n2AJOcl+rWCfTTx0zdV6RBEYaJMyRm4DhfbeoejA1wIgUUUnCr29LA+5FF3WDud9
+  FocCIS9WOOkxakMWeHwg6zk=
+  -----END CERTIFICATE-----
 
 identity:
   issuer:
+    # scheme: kubernetes.io/tls — Linkerd reads the issuer key+cert from a pre-created
+    # Kubernetes Secret named 'linkerd-identity-issuer' in the 'linkerd' namespace.
+    # The install script creates that secret from AWS Secrets Manager before this chart is installed.
     scheme: kubernetes.io/tls
 
 proxyInit:

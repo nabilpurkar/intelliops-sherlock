@@ -71,3 +71,8 @@ output "argocd_secret_arn" {
   description = "ARN of the ArgoCD credentials secret"
   value       = module.secrets.argocd_secret_arn
 }
+
+output "linkerd_secret_arn" {
+  description = "ARN of the Linkerd mTLS certs secret"
+  value       = module.secrets.linkerd_secret_arn
+}
