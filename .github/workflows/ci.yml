@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+  id-token: write
+  security-events: write
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed-services: ${{ steps.build-matrix.outputs.services }}
+      has-service-changes: ${{ steps.build-matrix.outputs.has-changes }}
+      terraform: ${{ steps.filter.outputs.terraform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            order-service:
+              - 'services/order-service/**'
+            payment-service:
+              - 'services/payment-service/**'
+            inventory-service:
+              - 'services/inventory-service/**'
+            load-generator:
+              - 'services/load-generator/**'
+            terraform:
+              - 'terraform/**'
+
+      - id: build-matrix
+        run: |
+          services=()
+          [[ "${{ steps.filter.outputs.order-service }}" == "true" ]] && services+=("order-service")
+          [[ "${{ steps.filter.outputs.payment-service }}" == "true" ]] && services+=("payment-service")
+          [[ "${{ steps.filter.outputs.inventory-service }}" == "true" ]] && services+=("inventory-service")
+          [[ "${{ steps.filter.outputs.load-generator }}" == "true" ]] && services+=("load-generator")
+
+          if [ ${#services[@]} -eq 0 ]; then
+            echo 'services=[]' >> "$GITHUB_OUTPUT"
+            echo 'has-changes=false' >> "$GITHUB_OUTPUT"
+          else
+            json=$(printf '"%s",' "${services[@]}" | sed 's/,$//')
+            echo "services=[${json}]" >> "$GITHUB_OUTPUT"
+            echo 'has-changes=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  security-scan:
+    needs: detect-changes
+    uses: ./.github/workflows/_reusable/security-scan.yml
+    with:
+      terraform_changed: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+    permissions:
+      contents: read
+      security-events: write
+
+  build-push:
+    needs: [detect-changes, security-scan]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.has-service-changes == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.changed-services) }}
+    uses: ./.github/workflows/_reusable/docker-build-push.yml
+    with:
+      service: ${{ matrix.service }}
+      aws_region: us-east-1
+      aws_account_id: "007066145518"
+      role_arn: arn:aws:iam::007066145518:role/github-actions-role
+      image_tag: ${{ github.sha }}
+    permissions:
+      id-token: write
+      contents: read
+      security-events: write
+
+  update-manifests:
+    needs: [detect-changes, build-push]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.has-service-changes == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.changed-services) }}
+    uses: ./.github/workflows/_reusable/update-manifests.yml
+    with:
+      service: ${{ matrix.service }}
+      image_tag: ${{ github.sha }}
+      aws_account_id: "007066145518"
+      aws_region: us-east-1
+    permissions:
+      contents: write

@@ -46,6 +46,18 @@ module "ecr" {
   services    = ["order-service", "payment-service", "inventory-service", "load-generator"]
 }
 
+module "iam" {
+  source = "../../modules/iam"
+
+  github_repo          = "nabilpurkar/intelliops-sherlock"
+  aws_account_id       = "007066145518"
+  aws_region           = "us-east-1"
+  ecr_repo_prefix      = "intelliops-dev"
+  create_oidc_provider = true
+  environment          = "dev"
+  project              = "intelliops"
+}
+
 module "eks" {
   source = "../../modules/eks"
 
