@@ -233,6 +233,7 @@ kubectl apply -f "${INGRESS}/ingress-prometheus.yaml"
 kubectl apply -f "${INGRESS}/ingress-alertmanager.yaml"
 kubectl apply -f "${INGRESS}/ingress-sonarqube.yaml"
 kubectl apply -f "${INGRESS}/ingress-apps.yaml"
+kubectl apply -f "${INGRESS}/ingress-locust.yaml"
 kubectl apply -f "${INGRESS}/ingress-kong-admin.yaml"
 
 success "IngressClass and all service ingresses applied"
