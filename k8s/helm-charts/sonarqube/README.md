@@ -194,7 +194,7 @@ To get some guidance when setting the Xmx and Xms values, please refer to this [
 
 Starting from `2026.1.0`, this chart relies on the embedded H2 database for testing purposes. Therefore, we removed the deprecated PostgreSQL dependency.
 
-In order to upgrade to the newest chart from one version prior to this, you need to 
+In order to upgrade to the newest chart from one version prior to this, you need to
 
 1. backup your database
 2. import it to a new database
@@ -214,7 +214,7 @@ Please check `./postgresql-backup.sh` as a reference to create your own script t
 # Options:
 # -n namespace    Kubernetes namespace (default: sonarqube)
 # -u username     PostgreSQL username (default: sonarUser)
-# -p password     PostgreSQL password (default: sonarPass)  
+# -p password     PostgreSQL password (default: sonarPass)
 # -d database     Database name (default: sonarDB)
 # -h, --help      Show help
 

@@ -170,7 +170,7 @@ numbering uses [semantic versioning](http://semver.org).
 
 ## v4.21.1
 
-* removed falco-expoter (now deprecated) references from the readme 
+* removed falco-expoter (now deprecated) references from the readme
 
 ## v4.21.0
 
@@ -234,7 +234,7 @@ numbering uses [semantic versioning](http://semver.org).
 
 ## v4.14.1
 
-* fix(falco/dashboard): make pod variable independent of triggered rules. CPU and memory are now visible for each 
+* fix(falco/dashboard): make pod variable independent of triggered rules. CPU and memory are now visible for each
   pod, even when no rules have been triggered for that falco instance.
 
 ## v4.14.0
@@ -293,10 +293,10 @@ numbering uses [semantic versioning](http://semver.org).
   a new Falco configuration file and selects the appropriate engine
   kind based on the environment where Falco is deployed.
 
-  With this commit, along with falcoctl PR #630, the Helm charts now 
-  support different driver kinds for Falco instances based on the 
+  With this commit, along with falcoctl PR #630, the Helm charts now
+  support different driver kinds for Falco instances based on the
   specific node they are running on. When driver.kind=auto is set,
-  each Falco instance dynamically selects the most suitable 
+  each Falco instance dynamically selects the most suitable
   driver (e.g., ebpf, kmod, modern_ebpf) for the node.
   +-------------------------------------------------------+
   | Kubernetes Cluster                                    |
@@ -323,9 +323,9 @@ numbering uses [semantic versioning](http://semver.org).
   This commit ensures that we mount them in the falco container.
 
   Note that, the /sys/module/falco is now mounted as /sys/module since
-  we do not know which kind of driver will be used. The falco folder 
-  exists under /sys/module only when the kernel module is loaded, 
-  hence it's not possible to use the /sys/module/falco hostpath when driver.kind 
+  we do not know which kind of driver will be used. The falco folder
+  exists under /sys/module only when the kernel module is loaded,
+  hence it's not possible to use the /sys/module/falco hostpath when driver.kind
   is set to auto.
 
 ## v4.8.1

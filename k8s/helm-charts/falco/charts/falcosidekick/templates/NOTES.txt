@@ -41,4 +41,3 @@
 2. Try to enable Falcosidekick-UI (WebUI) by adding this argument to your command:
   --set webui.enabled=true
 {{- end }}
-

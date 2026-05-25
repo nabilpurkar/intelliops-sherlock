@@ -10,7 +10,7 @@ numbering uses [semantic versioning](http://semver.org).
 
 ## 0.2.3 - 2024-12-18
 
-- add a Grafana dashboard for the Prometheus metrics 
+- add a Grafana dashboard for the Prometheus metrics
 
 ## 0.2.1 - 2024-12-09
 

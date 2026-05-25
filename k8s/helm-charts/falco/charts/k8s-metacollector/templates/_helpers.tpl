@@ -105,7 +105,7 @@ Generate the ports for the container
 {{- if .Values.service.create }}
 {{- with .Values.service.ports }}
 {{- range $key, $value := . }}
-- name: "{{ $key }}" 
+- name: "{{ $key }}"
 {{- range $key1, $value1 := $value }}
   {{- if ne $key1 "targetPort" }}
   {{- if eq $key1 "port" }}

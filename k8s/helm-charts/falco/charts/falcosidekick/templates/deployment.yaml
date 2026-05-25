@@ -128,7 +128,7 @@ spec:
               value: {{ .Values.config.mutualtlsclient.cacertfile | quote }}
             - name: TLSCLIENT_CACERTFILE
               value: {{ .Values.config.tlsclient.cacertfile | quote }}
-            {{-  if .Values.config.tlsserver.deploy }}  
+            {{-  if .Values.config.tlsserver.deploy }}
             - name: TLSSERVER_DEPLOY
               value: {{ .Values.config.tlsserver.deploy | quote }}
             - name: TLSSERVER_CERTFILE
@@ -158,8 +158,8 @@ spec:
             - mountPath: /etc/certs/server
               name: certs-volume
               readOnly: true
-        {{- end }}  
-        {{- if or .Values.extraVolumeMounts }}   
+        {{- end }}
+        {{- if or .Values.extraVolumeMounts }}
 {{ toYaml .Values.extraVolumeMounts | indent 12 }}
         {{- end }}
         {{- end }}

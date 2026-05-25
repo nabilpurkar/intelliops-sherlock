@@ -93,7 +93,7 @@ Return the appropriate apiVersion for poddisruptionbudget.
 {{- end -}}
 {{- end -}}
 
-{{/* 
+{{/*
 Return true if the detected platform is Openshift
 Usage:
 {{- include "common.compatibility.isOpenshift" . -}}

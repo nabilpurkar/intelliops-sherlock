@@ -27,7 +27,7 @@ If you use a workflow that frequently deletes and re-creates installs, you
 should make sure to delete PVCs when you delete the release:
 
 ```
-helm delete foo; kubectl delete pvc data-foo-postgresql-0 
+helm delete foo; kubectl delete pvc data-foo-postgresql-0
 ```
 
 #### Upgrading a release fails due to missing ServiceAccount
@@ -143,7 +143,7 @@ re-installing with a non-random password.
 Kubernetes control plane components rely on resources within the `kube-system` namespace.
 Modifying or rejecting requests in this namespace using an admission webhook may cause
 unintended disruptions to cluster operations, including failures in critical services like
-`kube-dns`. By default, KIC's admission webhook is configured with no namespace selector, 
+`kube-dns`. By default, KIC's admission webhook is configured with no namespace selector,
 which means it will intercept requests for resources in all namespaces, including `kube-system`.
 
 #### Solution

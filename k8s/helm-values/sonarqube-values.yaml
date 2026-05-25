@@ -5,7 +5,8 @@
 community:
   enabled: true
 
-monitoringPasscode: "intelliops-monitoring-2026"
+monitoringPasscodeSecretName: postgresql-credentials
+monitoringPasscodeSecretKey: monitoring-passcode
 
 persistence:
   enabled: false

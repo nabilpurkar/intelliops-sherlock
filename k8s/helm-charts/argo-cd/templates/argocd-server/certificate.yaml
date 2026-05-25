@@ -19,7 +19,7 @@ spec:
       {{- range $key, $value := . }}
       {{ $key }}: {{ $value | quote }}
       {{- end }}
-  {{- end }} 
+  {{- end }}
   secretName: argocd-server-tls
   commonName: {{ .Values.server.certificate.domain | default .Values.global.domain }}
   dnsNames:

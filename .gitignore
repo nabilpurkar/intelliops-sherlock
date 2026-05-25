@@ -27,3 +27,7 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Tools downloaded during setup (not project code)
+step_*/
+step_linux_*.tar.gz

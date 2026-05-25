@@ -32,7 +32,7 @@ The full documentation is available on its own website: [https://docs.falco-talo
 ## Installation
 
 ```shell
-helm repo add falcosecurity https://falcosecurity.github.io/charts 
+helm repo add falcosecurity https://falcosecurity.github.io/charts
 helm repo update
 helm install falco-talon falcosecurity/falco-talon -n falco --create-namespace -f values.yaml
 ```

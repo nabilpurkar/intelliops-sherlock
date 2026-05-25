@@ -10,4 +10,3 @@
 - "{{.volumePermissions.image.registry}}/{{.volumePermissions.image.repository}}:{{.volumePermissions.image.tag}}"
 # postgres-exporter image
 - "{{.metrics.image.registry}}/{{.metrics.image.repository}}:{{.metrics.image.tag}}"
-

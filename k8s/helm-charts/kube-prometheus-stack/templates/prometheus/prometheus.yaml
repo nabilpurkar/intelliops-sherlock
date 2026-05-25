@@ -399,7 +399,7 @@ spec:
 {{- if .Values.prometheus.prometheusSpec.thanos }}
   thanos:
 {{- with .Values.prometheus.prometheusSpec.thanos.image }}
-    image: {{ . }} 
+    image: {{ . }}
 {{- end }}
 {{- with (omit .Values.prometheus.prometheusSpec.thanos "image" "objectStorageConfig" "secretProviderClass") }}
 {{ toYaml . | indent 4 }}

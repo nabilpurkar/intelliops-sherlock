@@ -232,35 +232,35 @@ server:
           port: 8080
       frontendConfig:
         redirectToHttps:
-          enabled: true 
+          enabled: true
       managedCertificate:
         enabled: true
 ```
 
 ### AKS Application Routing (generic)
 
-AKS Web Application Routing uses the standard Kubernetes Ingress specification, so the `generic` controller type is sufficient. 
-webapprouting provides a managed ingress controller based on nginx. 
+AKS Web Application Routing uses the standard Kubernetes Ingress specification, so the `generic` controller type is sufficient.
+webapprouting provides a managed ingress controller based on nginx.
 
-```yaml 
-global: 
-  domain: argocd.example.com 
- 
-configs: 
-  params: 
-    server.insecure: true 
- 
-server: 
-  ingress: 
-    enabled: true 
-    controller: generic 
-    ingressClassName: webapprouting.kubernetes.azure.com 
-    annotations: 
-      # Optional: Add any AKS-specific annotations if needed 
-    extraTls: 
-      - hosts: 
-          - argocd.example.com 
-        # Certificate can be managed by Web Application Routing 
+```yaml
+global:
+  domain: argocd.example.com
+
+configs:
+  params:
+    server.insecure: true
+
+server:
+  ingress:
+    enabled: true
+    controller: generic
+    ingressClassName: webapprouting.kubernetes.azure.com
+    annotations:
+      # Optional: Add any AKS-specific annotations if needed
+    extraTls:
+      - hosts:
+          - argocd.example.com
+        # Certificate can be managed by Web Application Routing
         secretName: argocd-tls
 ```
 
@@ -519,7 +519,7 @@ Steps to rotate the secret when using the helm chart (bold step is additional to
   ```
 
 ### 6.9.0
-ApplicationSet controller is always created to follow [upstream's manifest](https://github.com/argoproj/argo-cd/blob/v2.11.0/manifests/core-install/kustomization.yaml#L9). 
+ApplicationSet controller is always created to follow [upstream's manifest](https://github.com/argoproj/argo-cd/blob/v2.11.0/manifests/core-install/kustomization.yaml#L9).
 
 ### 6.4.0
 

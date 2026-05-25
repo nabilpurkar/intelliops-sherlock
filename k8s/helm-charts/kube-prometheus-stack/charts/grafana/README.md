@@ -571,9 +571,9 @@ grafana.ini:
 
 ### Installing plugins
 
-If you want to install a Grafana plugin using the helm chart, you can do so by using the identifier of the plugin, for example `digirich-bubblechart-panel` will install [Bubble Chart](https://grafana.com/grafana/plugins/digrich-bubblechart-panel/). 
+If you want to install a Grafana plugin using the helm chart, you can do so by using the identifier of the plugin, for example `digirich-bubblechart-panel` will install [Bubble Chart](https://grafana.com/grafana/plugins/digrich-bubblechart-panel/).
 
-You can also install a plugin and a specific version by specifying the version and URL of the download file as shown in the example below : 
+You can also install a plugin and a specific version by specifying the version and URL of the download file as shown in the example below :
 
 ```yaml
 plugins:
