@@ -59,7 +59,7 @@ jobs:
 
   security-scan:
     needs: detect-changes
-    uses: ./.github/workflows/_reusable/security-scan.yml
+    uses: ./.github/workflows/_security-scan.yml
     with:
       terraform_changed: ${{ needs.detect-changes.outputs.terraform == 'true' }}
     permissions:
@@ -75,7 +75,7 @@ jobs:
       fail-fast: false
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.changed-services) }}
-    uses: ./.github/workflows/_reusable/docker-build-push.yml
+    uses: ./.github/workflows/_docker-build-push.yml
     with:
       service: ${{ matrix.service }}
       aws_region: us-east-1
@@ -96,7 +96,7 @@ jobs:
       fail-fast: false
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.changed-services) }}
-    uses: ./.github/workflows/_reusable/update-manifests.yml
+    uses: ./.github/workflows/_update-manifests.yml
     with:
       service: ${{ matrix.service }}
       image_tag: ${{ github.sha }}
