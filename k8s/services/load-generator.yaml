@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: load-generator
+  namespace: aiops-demo
+  labels:
+    app: load-generator
+spec:
+  type: ClusterIP
+  selector:
+    app: load-generator
+  ports:
+    - name: web-ui
+      port:       8089
+      targetPort: 8089
+      protocol:   TCP
