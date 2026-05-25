@@ -1,0 +1,70 @@
+name: ArgoCD Sync
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: ArgoCD Application name to sync
+        type: string
+        required: false
+        default: microservices
+      argocd_url:
+        type: string
+        required: false
+        default: https://argocd.infrastructurepath.online
+    secrets:
+      argocd_auth_token:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger ArgoCD sync and wait for healthy
+        env:
+          ARGOCD_TOKEN: ${{ secrets.argocd_auth_token }}
+          ARGOCD_URL: ${{ inputs.argocd_url }}
+          APP: ${{ inputs.app_name }}
+        run: |
+          if [ -z "${ARGOCD_TOKEN}" ]; then
+            echo "ARGOCD_AUTH_TOKEN not set — ArgoCD will auto-sync within ~3 minutes (automated.selfHeal=true)"
+            echo "To speed up deployments, add ARGOCD_AUTH_TOKEN to GitHub secrets."
+            exit 0
+          fi
+
+          echo "Triggering sync for application: ${APP}"
+          curl -sf -X POST "${ARGOCD_URL}/api/v1/applications/${APP}/sync" \
+            -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"prune":true,"dryRun":false,"force":false}' || {
+            echo "Sync trigger failed — ArgoCD will still auto-sync. Continuing."
+            exit 0
+          }
+
+          echo "Waiting for sync to complete (up to 5 minutes) ..."
+          for i in $(seq 1 30); do
+            APP_STATUS=$(curl -sf "${ARGOCD_URL}/api/v1/applications/${APP}" \
+              -H "Authorization: Bearer ${ARGOCD_TOKEN}" 2>/dev/null) || continue
+
+            HEALTH=$(echo "${APP_STATUS}" | python3 -c \
+              "import sys,json; d=json.load(sys.stdin); print(d['status']['health']['status'])" 2>/dev/null || echo "Unknown")
+            SYNC=$(echo "${APP_STATUS}" | python3 -c \
+              "import sys,json; d=json.load(sys.stdin); print(d['status']['sync']['status'])" 2>/dev/null || echo "Unknown")
+
+            echo "  [${i}/30] Health=${HEALTH}  Sync=${SYNC}"
+
+            if [ "${HEALTH}" = "Healthy" ] && [ "${SYNC}" = "Synced" ]; then
+              echo "Application ${APP} is Healthy and Synced"
+              exit 0
+            fi
+
+            [ "${HEALTH}" = "Degraded" ] && echo "Warning: application is Degraded"
+            sleep 10
+          done
+
+          echo "Timed out waiting for ${APP} to become Healthy+Synced"
+          echo "Check ArgoCD UI: ${ARGOCD_URL}/applications/${APP}"
+          exit 1

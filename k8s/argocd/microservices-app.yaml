@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: microservices
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.io
+  labels:
+    app.kubernetes.io/part-of: intelliops
+spec:
+  project: intelliops
+
+  source:
+    repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
+    targetRevision: main
+    path: k8s/apps
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: apps
+
+  syncPolicy:
+    automated:
+      prune: true      # remove resources deleted from git
+      selfHeal: true   # revert manual cluster changes
+    syncOptions:
+      - CreateNamespace=false   # namespace pre-created by install-stack.sh
+      - ApplyOutOfSyncOnly=true # skip already-synced resources
+      - ServerSideApply=true    # avoids annotation size limit on large objects
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  revisionHistoryLimit: 5

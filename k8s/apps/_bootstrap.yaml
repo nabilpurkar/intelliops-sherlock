@@ -1,0 +1,22 @@
+# Bootstrap resources for the apps namespace.
+# Applied first by ArgoCD (underscore prefix sorts before other files).
+# The namespace itself is pre-created by install-stack.sh; this only adds
+# the ServiceAccount and ConfigMap that every service pod depends on.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: apps-sa
+  namespace: apps
+  labels:
+    app.kubernetes.io/managed-by: argocd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: apps
+  labels:
+    app.kubernetes.io/managed-by: argocd
+data:
+  OTEL_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4317"

@@ -38,7 +38,7 @@ jobs:
           IMAGE_TAG: ${{ inputs.image_tag }}
           REGISTRY: ${{ inputs.aws_account_id }}.dkr.ecr.${{ inputs.aws_region }}.amazonaws.com
         run: |
-          manifest="k8s/deployments/${SERVICE}.yaml"
+          manifest="k8s/apps/${SERVICE}.yaml"
           new_image="${REGISTRY}/intelliops-dev/${SERVICE}:${IMAGE_TAG}"
 
           sed -i "s|image: ${REGISTRY}/intelliops-dev/${SERVICE}:.*|image: ${new_image}|" "${manifest}"

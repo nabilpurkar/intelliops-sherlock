@@ -11,8 +11,9 @@ name: CI
 #     → sonarqube         (code quality gate — always runs)
 #     → iac-scan          (Checkov — runs when terraform files changed)
 #     → build-push        (Docker build + Trivy image + Cosign + push — main only)
-#     → update-manifests  (bump image tag in k8s manifests — main only)
-#     → dast              (OWASP ZAP baseline — main only)
+#     → update-manifests  (bump image tag in k8s/apps/{service}.yaml — main only)
+#     → argocd-sync       (trigger ArgoCD to deploy to EKS, wait for Healthy)
+#     → dast              (OWASP ZAP baseline against live app — main only)
 #
 # Runtime security (Falco → DefectDojo) and observability (Prometheus/Grafana)
 # run continuously in-cluster and are not modelled as pipeline stages here.
@@ -183,9 +184,27 @@ jobs:
     permissions:
       contents: write
 
-# ── Stage 9: DAST ─────────────────────────────────────────────────────────────
-  dast:
+# ── Stage 9: ArgoCD sync → deploy to EKS ─────────────────────────────────────
+# update-manifests pushed the new image tag to k8s/apps/{service}.yaml.
+# ArgoCD detects the git change and rolls out the new pods. With automated
+# selfHeal=true this happens within ~3 min regardless; this step triggers it
+# immediately and waits for Healthy+Synced before DAST runs.
+  argocd-sync:
     needs: [detect-changes, update-manifests]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.has-service-changes == 'true'
+    uses: ./.github/workflows/_argocd-sync.yml
+    with:
+      app_name: microservices
+    secrets:
+      argocd_auth_token: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+    permissions:
+      contents: read
+
+# ── Stage 10: DAST (after ArgoCD deploy is healthy) ──────────────────────────
+  dast:
+    needs: [detect-changes, argocd-sync]
     if: |
       github.ref == 'refs/heads/main' &&
       needs.detect-changes.outputs.has-service-changes == 'true'

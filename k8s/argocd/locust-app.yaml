@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: locust
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.io
+  labels:
+    app.kubernetes.io/part-of: intelliops
+spec:
+  project: intelliops
+
+  source:
+    repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
+    targetRevision: main
+    path: k8s/locust
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: locust
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  revisionHistoryLimit: 5

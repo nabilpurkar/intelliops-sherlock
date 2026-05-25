@@ -210,9 +210,9 @@ kubectl annotate externalsecret falco-defectdojo-secret -n falco \
   && info "Triggered ExternalSecret refresh for falco-defectdojo-apikey" || true
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. ArgoCD — admin password
+# 3. ArgoCD — admin password + Applications + auth token
 # ─────────────────────────────────────────────────────────────────────────────
-step "3/4  ArgoCD — admin password"
+step "3/4  ArgoCD — credentials + Applications + auth token"
 
 ARGOCD_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null || true)
@@ -223,11 +223,45 @@ fi
 
 if [ -z "${ARGOCD_PASS}" ]; then
   ARGOCD_PASS="run: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
-  warn "Could not retrieve ArgoCD password automatically"
+  warn "Could not retrieve ArgoCD password automatically — skipping Application apply and token generation"
+  ARGOCD_AUTH_TOKEN=""
 else
   success "ArgoCD admin password retrieved"
-  # Store for future cluster recreates
   upsert_secret_key "intelliops/dev/argocd" "admin_password" "${ARGOCD_PASS}"
+
+  # Apply AppProject and Application manifests
+  info "Applying ArgoCD AppProject and Applications ..."
+  kubectl apply -f "${REPO_ROOT}/k8s/argocd/project.yaml"
+  kubectl apply -f "${REPO_ROOT}/k8s/argocd/microservices-app.yaml"
+  kubectl apply -f "${REPO_ROOT}/k8s/argocd/locust-app.yaml"
+  success "ArgoCD Applications registered"
+
+  # Generate a session token for CI pipeline use (stored as GitHub secret)
+  wait_for_url "ArgoCD API" "${ARGOCD_URL}/api/v1/applications" 30 10
+
+  ARGOCD_AUTH_TOKEN=$(curl -sf -X POST "${ARGOCD_URL}/api/v1/session" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"admin\",\"password\":\"${ARGOCD_PASS}\"}" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])") || ARGOCD_AUTH_TOKEN=""
+
+  if [ -n "${ARGOCD_AUTH_TOKEN}" ]; then
+    upsert_secret_key "intelliops/dev/argocd" "auth_token" "${ARGOCD_AUTH_TOKEN}"
+    success "ArgoCD auth token generated and stored in AWS SM"
+  else
+    warn "Could not generate ArgoCD auth token — CI will rely on auto-sync (3 min delay)"
+    ARGOCD_AUTH_TOKEN=""
+  fi
+
+  # Trigger initial sync for both apps
+  info "Triggering initial ArgoCD sync ..."
+  curl -sf -X POST "${ARGOCD_URL}/api/v1/applications/microservices/sync" \
+    -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"prune":true}' >/dev/null 2>&1 && success "microservices sync triggered" || warn "microservices sync trigger failed (will auto-sync)"
+  curl -sf -X POST "${ARGOCD_URL}/api/v1/applications/locust/sync" \
+    -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"prune":true}' >/dev/null 2>&1 && success "locust sync triggered" || warn "locust sync trigger failed (will auto-sync)"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -280,9 +314,12 @@ key_id   = key_data["key_id"]
 pub_key  = key_data["key"]
 
 secrets = {
-    "SONAR_TOKEN":        "${SONAR_TOKEN}",
-    "DEFECTDOJO_API_KEY": "${DD_TOKEN}",
+    "SONAR_TOKEN":          "${SONAR_TOKEN}",
+    "DEFECTDOJO_API_KEY":   "${DD_TOKEN}",
+    "ARGOCD_AUTH_TOKEN":    "${ARGOCD_AUTH_TOKEN}",
 }
+# Skip empty values (e.g. ARGOCD_AUTH_TOKEN if not generated)
+secrets = {k: v for k, v in secrets.items() if v}
 
 for name, value in secrets.items():
     gh_request(token, "PUT", f"/repos/{repo}/actions/secrets/{name}", {
@@ -396,9 +433,13 @@ Set these in **GitHub → repo → Settings → Secrets and variables → Action
 \`\`\`
 SONAR_TOKEN        = ${SONAR_TOKEN}
 DEFECTDOJO_API_KEY = ${DD_TOKEN}
+ARGOCD_AUTH_TOKEN  = ${ARGOCD_AUTH_TOKEN}
 \`\`\`
 
-To update them automatically next time (needs a PAT with \`repo\` scope):
+> **ARGOCD_AUTH_TOKEN** is a 24-hour JWT. Re-run \`configure-stack.sh\` to refresh it.
+> Without it the pipeline still works — ArgoCD auto-syncs within ~3 minutes.
+
+To update all secrets automatically next time (needs a PAT with \`repo\` scope):
 \`\`\`bash
 GITHUB_PAT=ghp_xxx ./scripts/configure-stack.sh
 \`\`\`
@@ -414,7 +455,7 @@ All credentials survive cluster destroy/recreate via these paths:
 | \`intelliops/dev/postgresql\` | \`pg_password\`, \`sonarqube_password\`, \`defectdojo_password\` |
 | \`intelliops/dev/sonarqube\` | \`admin_password\`, \`ci_token\` |
 | \`intelliops/dev/defectdojo\` | \`admin_password\`, \`api_key\`, \`secret_key\`, \`valkey_password\` |
-| \`intelliops/dev/argocd\` | \`admin_password\` |
+| \`intelliops/dev/argocd\` | \`admin_password\`, \`auth_token\` |
 | \`intelliops/dev/grafana\` | \`admin_password\` |
 | \`intelliops/dev/kong\` | *(kong credentials)* |
 | \`intelliops/dev/linkerd\` | \`issuer_crt\`, \`issuer_key\` |

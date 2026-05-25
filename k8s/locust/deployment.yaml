@@ -1,0 +1,69 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust
+  namespace: locust
+  labels:
+    app: locust
+    team: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust
+  template:
+    metadata:
+      labels:
+        app: locust
+    spec:
+      containers:
+        - name: locust
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/load-generator:latest
+          imagePullPolicy: Always
+          ports:
+            - name: web-ui
+              containerPort: 8089
+              protocol: TCP
+          env:
+            - name: ORDER_SERVICE_URL
+              value: "http://order-service.apps.svc.cluster.local:8000"
+            - name: PAYMENT_SERVICE_URL
+              value: "http://payment-service.apps.svc.cluster.local:8002"
+            - name: INVENTORY_SERVICE_URL
+              value: "http://inventory-service.apps.svc.cluster.local:8001"
+            - name: LOCUST_USERS
+              value: "20"
+            - name: LOCUST_SPAWN_RATE
+              value: "2"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8089
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust
+  namespace: locust
+  labels:
+    app: locust
+spec:
+  type: ClusterIP
+  selector:
+    app: locust
+  ports:
+    - name: web-ui
+      port: 8089
+      targetPort: 8089
+      protocol: TCP

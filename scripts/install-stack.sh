@@ -251,6 +251,18 @@ kubectl apply -f "${INGRESS}/ingress-defectdojo.yaml"
 
 success "IngressClass and all service ingresses applied"
 
+# ─── 16c. ArgoCD AppProject + Applications ────────────────────────────────────
+step "16c/19  ArgoCD AppProject + Applications"
+
+info "Applying ArgoCD AppProject ..."
+kubectl apply -f "${REPO_ROOT}/k8s/argocd/project.yaml"
+
+info "Applying ArgoCD Applications (microservices + locust) ..."
+kubectl apply -f "${REPO_ROOT}/k8s/argocd/microservices-app.yaml"
+kubectl apply -f "${REPO_ROOT}/k8s/argocd/locust-app.yaml"
+
+success "ArgoCD Applications registered — they will sync k8s/apps/ and k8s/locust/ automatically"
+
 # ─── 17. falco ───────────────────────────────────────────────────────────────
 step "17/22  falco"
 helm_install falco falco \

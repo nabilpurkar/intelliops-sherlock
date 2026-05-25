@@ -18,18 +18,18 @@ spec:
               service:
                 name: order-service
                 port:
-                  number: 8080
+                  number: 8000
           - path: /payments
             pathType: Prefix
             backend:
               service:
                 name: payment-service
                 port:
-                  number: 8080
+                  number: 8002
           - path: /inventory
             pathType: Prefix
             backend:
               service:
                 name: inventory-service
                 port:
-                  number: 8080
+                  number: 8001
