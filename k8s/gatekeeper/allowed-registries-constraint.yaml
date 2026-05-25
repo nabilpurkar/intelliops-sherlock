@@ -1,0 +1,17 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: allowed-registries-apps
+spec:
+  # warn: violations are logged but requests are not rejected.
+  # Change to "deny" to enforce blocking.
+  enforcementAction: warn
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - apps
+  parameters:
+    repos:
+      - "007066145518.dkr.ecr.us-east-1.amazonaws.com/"

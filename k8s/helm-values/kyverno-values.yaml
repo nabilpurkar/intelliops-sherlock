@@ -1,0 +1,39 @@
+# chart: kyverno/kyverno version 3.8.1 (app v1.18.1)
+# install: helm upgrade --install kyverno k8s/helm-charts/kyverno-3.8.1.tgz -n kyverno --create-namespace -f k8s/helm-values/kyverno-values.yaml
+
+admissionController:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+backgroundController:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+cleanupController:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+reportsController:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

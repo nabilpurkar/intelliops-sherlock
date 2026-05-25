@@ -62,7 +62,7 @@ info "Values dir : ${VALUES}"
 # secrets into them immediately without waiting for Helm --create-namespace.
 step "Pre-creating namespaces"
 
-for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco external-dns apps locust defectdojo; do
+for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco external-dns apps locust defectdojo kyverno gatekeeper-system; do
   if kubectl get namespace "${ns}" &>/dev/null; then
     warn "Namespace ${ns} already exists"
   else
@@ -252,24 +252,60 @@ kubectl apply -f "${INGRESS}/ingress-defectdojo.yaml"
 success "IngressClass and all service ingresses applied"
 
 # ─── 17. falco ───────────────────────────────────────────────────────────────
-step "17/19  falco"
+step "17/22  falco"
 helm_install falco falco \
   "${CHARTS}/falco" \
   -f "${VALUES}/falco-values.yaml"
 
 # ─── 18. sonarqube ───────────────────────────────────────────────────────────
-step "18/19  sonarqube"
+step "18/22  sonarqube"
 helm_install sonarqube sonarqube \
   "${CHARTS}/sonarqube" \
   -f "${VALUES}/sonarqube-values.yaml" \
   --timeout 10m
 
 # ─── 19. defectdojo ──────────────────────────────────────────────────────────
-step "19/19  defectdojo"
+step "19/22  defectdojo"
 helm_install defectdojo defectdojo \
   "${CHARTS}/defectdojo" \
   -f "${VALUES}/defectdojo-values.yaml" \
   --timeout 15m
+
+# ─── 20. kyverno ─────────────────────────────────────────────────────────────
+step "20/22  kyverno"
+helm_install kyverno kyverno \
+  "${CHARTS}/kyverno-3.8.1.tgz" \
+  -f "${VALUES}/kyverno-values.yaml"
+
+info "Applying Kyverno policies (Audit mode — violations reported, not blocked) ..."
+kubectl apply -f "${REPO_ROOT}/k8s/kyverno-policies/"
+success "Kyverno policies applied"
+
+# ─── 21. gatekeeper (OPA) ────────────────────────────────────────────────────
+step "21/22  gatekeeper (OPA)"
+helm_install gatekeeper gatekeeper-system \
+  "${CHARTS}/gatekeeper-3.22.2.tgz" \
+  -f "${VALUES}/gatekeeper-values.yaml"
+
+info "Waiting 30 s for Gatekeeper webhooks to be ready ..."
+sleep 30
+
+info "Applying Gatekeeper ConstraintTemplates ..."
+kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-template.yaml"
+kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-template.yaml"
+
+info "Waiting 10 s for CRDs to be registered ..."
+sleep 10
+
+info "Applying Gatekeeper Constraints (warn mode — violations logged, not blocked) ..."
+kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-constraint.yaml"
+kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-constraint.yaml"
+success "Gatekeeper constraints applied"
+
+# ─── 22. (placeholder for future tools) ──────────────────────────────────────
+step "22/22  Security coverage complete"
+info "Tools installed: Kyverno, OPA Gatekeeper, Falco, SonarQube, DefectDojo"
+info "CI pipeline covers: Semgrep, Trivy, Checkov, Gitleaks, OWASP Dep-Check, Cosign, ZAP"
 
 # ─── Verify ───────────────────────────────────────────────────────────────────
 step "Verification"

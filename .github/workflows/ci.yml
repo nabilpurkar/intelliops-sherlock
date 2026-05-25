@@ -91,6 +91,7 @@ jobs:
       id-token: write
       contents: read
       security-events: write
+      packages: write
 
   update-manifests:
     needs: [detect-changes, build-push]
@@ -109,3 +110,19 @@ jobs:
       aws_region: us-east-1
     permissions:
       contents: write
+
+  dast:
+    needs: [detect-changes, update-manifests]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.has-service-changes == 'true'
+    uses: ./.github/workflows/_dast-scan.yml
+    with:
+      target_url: https://apps.infrastructurepath.online
+      scan_type: baseline
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      contents: read
+      security-events: write
+      issues: write

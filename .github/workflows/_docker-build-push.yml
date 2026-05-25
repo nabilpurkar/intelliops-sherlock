@@ -33,6 +33,7 @@ permissions:
   id-token: write
   contents: read
   security-events: write
+  packages: write
 
 jobs:
   build-push:
@@ -55,6 +56,9 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - uses: docker/setup-buildx-action@v3
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
 
       - name: Build image locally for scanning
         uses: docker/build-push-action@v6
@@ -98,6 +102,7 @@ jobs:
             -F "branch_tag=${{ github.sha }}" || true
 
       - name: Build and push multi-platform image
+        id: build-push
         uses: docker/build-push-action@v6
         with:
           context: services/${{ inputs.service }}
@@ -108,3 +113,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha,scope=${{ inputs.service }}
           cache-to: type=gha,mode=max,scope=${{ inputs.service }}
+
+      - name: Sign image with Cosign (keyless via GitHub OIDC)
+        run: |
+          IMAGE_REF="${REGISTRY}/${IMAGE_NAME}@${{ steps.build-push.outputs.digest }}"
+          cosign sign --yes "${IMAGE_REF}"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}

@@ -1,0 +1,74 @@
+name: DAST - OWASP ZAP
+
+on:
+  workflow_call:
+    inputs:
+      target_url:
+        description: Base URL of the deployed application to scan
+        type: string
+        required: true
+      scan_type:
+        description: ZAP scan type — baseline (passive only) or full (active+passive)
+        type: string
+        required: false
+        default: baseline
+    secrets:
+      defectdojo_api_key:
+        required: false
+
+env:
+  DEFECTDOJO_URL: https://defectdojo.infrastructurepath.online
+
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
+jobs:
+  zap-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ZAP Baseline Scan (passive)
+        if: inputs.scan_type == 'baseline'
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ inputs.target_url }}
+          rules_file_name: .zap/rules.tsv
+          cmd_options: -a
+          fail_action: false
+
+      - name: ZAP Full Scan (active + passive)
+        if: inputs.scan_type == 'full'
+        uses: zaproxy/action-full-scan@v0.10.0
+        with:
+          target: ${{ inputs.target_url }}
+          rules_file_name: .zap/rules.tsv
+          cmd_options: -a
+          fail_action: false
+
+      - name: Upload ZAP SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+          category: zap-dast
+
+      - name: Upload ZAP report to DefectDojo
+        if: always()
+        env:
+          DEFECTDOJO_API_KEY: ${{ secrets.defectdojo_api_key }}
+        run: |
+          [ -z "${DEFECTDOJO_API_KEY}" ] && exit 0
+          [ -f report_xml.xml ] || exit 0
+          curl -sf -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=ZAP Scan" \
+            -F "file=@report_xml.xml" \
+            -F "product_name=IntelliOps Sherlock" \
+            -F "engagement_name=DAST - ZAP (${{ inputs.target_url }})" \
+            -F "auto_create_context=true" \
+            -F "active=true" \
+            -F "verified=false" \
+            -F "branch_tag=${{ github.sha }}" || true

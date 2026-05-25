@@ -109,6 +109,47 @@ jobs:
             -F "verified=false" \
             -F "branch_tag=${{ github.sha }}" || true
 
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: intelliops-sherlock
+          path: services
+          format: ALL
+          out: dependency-check-report
+          args: >-
+            --enableRetired
+            --failOnCVSS 9
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: dependency-check-report/dependency-check-report.sarif
+          category: dependency-check
+
+      - name: Upload to DefectDojo
+        if: always()
+        env:
+          DEFECTDOJO_API_KEY: ${{ secrets.defectdojo_api_key }}
+        run: |
+          [ -z "${DEFECTDOJO_API_KEY}" ] && exit 0
+          [ -f dependency-check-report/dependency-check-report.xml ] || exit 0
+          curl -sf -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=Dependency Check Scan" \
+            -F "file=@dependency-check-report/dependency-check-report.xml" \
+            -F "product_name=IntelliOps Sherlock" \
+            -F "engagement_name=CI Pipeline - OWASP Dependency Check" \
+            -F "auto_create_context=true" \
+            -F "active=true" \
+            -F "verified=false" \
+            -F "branch_tag=${{ github.sha }}" || true
+
   checkov:
     if: inputs.terraform_changed
     runs-on: ubuntu-latest

@@ -1,0 +1,25 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/title: Restrict Image Registries
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: ecr-only
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces:
+                - apps
+      validate:
+        message: "Application images must come from the ECR registry (007066145518.dkr.ecr.us-east-1.amazonaws.com)."
+        pattern:
+          spec:
+            containers:
+              - image: "007066145518.dkr.ecr.us-east-1.amazonaws.com/*"
