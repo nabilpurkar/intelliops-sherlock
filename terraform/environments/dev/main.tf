@@ -38,6 +38,14 @@ resource "aws_security_group_rule" "dev_machine_ipv6_all_tcp" {
 # NOTE: AWS EKS public_access_cidrs only accepts IPv4. The public endpoint
 # is open to 0.0.0.0/0 but protected by IAM/RBAC — no unauthenticated access.
 
+module "ecr" {
+  source = "../../modules/ecr"
+
+  environment = "dev"
+  project     = "intelliops"
+  services    = ["order-service", "payment-service", "inventory-service", "load-generator"]
+}
+
 module "eks" {
   source = "../../modules/eks"
 
