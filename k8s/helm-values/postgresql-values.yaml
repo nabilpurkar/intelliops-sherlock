@@ -1,0 +1,36 @@
+# chart: bitnami/postgresql version 18.6.7
+# install: helm upgrade --install postgresql bitnami/postgresql --version 18.6.7 -n database --create-namespace -f postgresql-values.yaml
+
+auth:
+  username: postgres
+  password: PLACEHOLDER_PG_PASSWORD
+  database: postgres
+
+initdb:
+  scripts:
+    init.sql: |
+      CREATE DATABASE sonarqube;
+      CREATE USER sonarqube WITH PASSWORD 'PLACEHOLDER_SONAR_DB_PASS';
+      GRANT ALL PRIVILEGES ON DATABASE sonarqube TO sonarqube;
+
+      CREATE DATABASE defectdojo;
+      CREATE USER defectdojo WITH PASSWORD 'PLACEHOLDER_DOJO_DB_PASS';
+      GRANT ALL PRIVILEGES ON DATABASE defectdojo TO defectdojo;
+
+      CREATE DATABASE kong;
+      CREATE USER kong WITH PASSWORD 'PLACEHOLDER_KONG_DB_PASS';
+      GRANT ALL PRIVILEGES ON DATABASE kong TO kong;
+
+primary:
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: gp2
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

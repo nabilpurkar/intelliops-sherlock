@@ -1,5 +1,6 @@
 # chart: kong/kong
 # install: helm upgrade --install kong kong/kong -n kong --create-namespace -f kong-values.yaml
+# Prerequisite: postgresql must be running in the database namespace.
 
 ingressController:
   installCRDs: false
@@ -16,3 +17,11 @@ proxy:
 admin:
   enabled: true
   type: ClusterIP
+
+env:
+  database: postgres
+  pg_host: postgresql.database.svc.cluster.local
+  pg_port: "5432"
+  pg_database: kong
+  pg_user: kong
+  pg_password: PLACEHOLDER_KONG_DB_PASS

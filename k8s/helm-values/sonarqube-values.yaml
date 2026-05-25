@@ -1,5 +1,6 @@
 # chart: sonarqube/sonarqube
 # install: helm upgrade --install sonarqube sonarqube/sonarqube -n sonarqube --create-namespace -f sonarqube-values.yaml
+# Prerequisite: postgresql must be running in the database namespace.
 
 persistence:
   enabled: false
@@ -14,3 +15,12 @@ resources:
   limits:
     cpu: 800m
     memory: 2Gi
+
+postgresql:
+  enabled: false
+
+jdbcOverwrite:
+  enable: true
+  jdbcUrl: jdbc:postgresql://postgresql.database.svc.cluster.local:5432/sonarqube
+  jdbcUsername: sonarqube
+  jdbcPassword: PLACEHOLDER_SONAR_DB_PASS
