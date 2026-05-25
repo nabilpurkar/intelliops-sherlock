@@ -3,9 +3,9 @@
 
 clusterName: intelliops-dev
 region: us-east-1
-vpcId: PLACEHOLDER_VPC_ID
+vpcId: vpc-08121b3ce1c651663
 
 serviceAccount:
   create: true
   annotations:
-    eks.amazonaws.com/role-arn: PLACEHOLDER_ALB_ROLE
+    eks.amazonaws.com/role-arn: arn:aws:iam::007066145518:role/intelliops-dev-alb-controller-role
