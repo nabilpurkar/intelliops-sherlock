@@ -4,6 +4,7 @@ metadata:
   name: apps
   namespace: apps
   annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
     konghq.com/strip-path: "true"
 spec:
   ingressClassName: kong

@@ -20,6 +20,11 @@ serviceAccount:
 
 policy: sync
 
+# Only manage records from ingresses that explicitly bear the ALB class annotation.
+# Kong service ingresses (ingressClassName: kong) must NOT get their own DNS records
+# because *.infrastructurepath.online (wildcard) on the ALB covers all subdomains.
+annotationFilter: "kubernetes.io/ingress.class=alb"
+
 logLevel: info
 
 resources:

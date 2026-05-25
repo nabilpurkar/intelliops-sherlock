@@ -4,9 +4,8 @@ metadata:
   name: argocd
   namespace: argocd
   annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
     konghq.com/strip-path: "false"
-    konghq.com/protocols: https
-    konghq.com/https-redirect-status-code: "301"
 spec:
   ingressClassName: kong
   rules:

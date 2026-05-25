@@ -253,6 +253,17 @@ resource "aws_security_group_rule" "node_ingress_ipv6_all" {
   security_group_id = aws_security_group.node.id
 }
 
+resource "aws_security_group_rule" "node_ingress_alb" {
+  count                    = var.alb_security_group_id != "" ? 1 : 0
+  description              = "ALB to pods (target-type: ip, all node ports)"
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 65535
+  protocol                 = "tcp"
+  source_security_group_id = var.alb_security_group_id
+  security_group_id        = aws_security_group.node.id
+}
+
 resource "aws_security_group_rule" "node_egress_https" {
   description       = "Nodes to AWS services (ECR, S3, CloudWatch, STS) via NAT"
   type              = "egress"

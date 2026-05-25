@@ -4,6 +4,7 @@ metadata:
   name: sonarqube
   namespace: sonarqube
   annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
     konghq.com/strip-path: "false"
 spec:
   ingressClassName: kong

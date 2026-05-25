@@ -84,6 +84,7 @@ module "eks" {
   private_subnet_ids       = module.vpc.public_subnet_ids # using public subnets in dev (no private subnets)
   allowed_cidr_blocks      = ["172.31.0.0/16"]
   allowed_ipv6_cidr_blocks = ["2401:4900:8814:ee83:d925:44d:8999:db27/128"]
+  alb_security_group_id    = "sg-0f04f39cf02aae228"
 
   endpoint_public_access = true
 
