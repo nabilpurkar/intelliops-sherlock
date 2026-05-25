@@ -17,3 +17,8 @@ output "linkerd_secret_arn" {
   description = "ARN of the Linkerd mTLS certs secret"
   value       = aws_secretsmanager_secret.linkerd.arn
 }
+
+output "defectdojo_secret_arn" {
+  description = "ARN of the DefectDojo credentials secret"
+  value       = aws_secretsmanager_secret.defectdojo.arn
+}

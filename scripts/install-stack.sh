@@ -62,7 +62,7 @@ info "Values dir : ${VALUES}"
 # secrets into them immediately without waiting for Helm --create-namespace.
 step "Pre-creating namespaces"
 
-for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco external-dns apps locust; do
+for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco external-dns apps locust defectdojo; do
   if kubectl get namespace "${ns}" &>/dev/null; then
     warn "Namespace ${ns} already exists"
   else
@@ -72,20 +72,20 @@ for ns in cert-manager external-secrets linkerd database monitoring argocd kong 
 done
 
 # ─── 1. cert-manager ──────────────────────────────────────────────────────────
-step "1/18  cert-manager"
+step "1/19  cert-manager"
 helm_install cert-manager cert-manager \
   "${CHARTS}/cert-manager" \
   -f "${VALUES}/cert-manager-values.yaml" \
   --set installCRDs=true
 
 # ─── 2. external-secrets ──────────────────────────────────────────────────────
-step "2/18  external-secrets"
+step "2/19  external-secrets"
 helm_install external-secrets external-secrets \
   "${CHARTS}/external-secrets" \
   -f "${VALUES}/external-secrets-values.yaml"
 
 # ─── 3. ExternalSecret manifests + wait for sync ─────────────────────────────
-step "3/18  Apply ExternalSecret manifests"
+step "3/19  Apply ExternalSecret manifests"
 
 info "Waiting for ESO CRDs to be established ..."
 kubectl wait --for condition=established --timeout=60s \
@@ -106,6 +106,7 @@ kubectl apply -f "${MANIFESTS}/grafana-secret.yaml"
 kubectl apply -f "${MANIFESTS}/argocd-secret.yaml"
 kubectl apply -f "${MANIFESTS}/kong-secret.yaml"
 kubectl apply -f "${MANIFESTS}/sonarqube-secret.yaml"
+kubectl apply -f "${MANIFESTS}/defectdojo-secret.yaml"
 
 info "Waiting 60 s for secrets to sync from AWS Secrets Manager ..."
 sleep 60
@@ -114,44 +115,44 @@ info "Checking ExternalSecret status ..."
 kubectl get externalsecret -A 2>/dev/null || true
 
 # ─── 4. postgresql ────────────────────────────────────────────────────────────
-step "4/18  postgresql"
+step "4/19  postgresql"
 helm_install postgresql database \
   "${CHARTS}/postgresql" \
   -f "${VALUES}/postgresql-values.yaml"
 
 # ─── 5. aws-load-balancer-controller ─────────────────────────────────────────
-step "5/18  aws-load-balancer-controller"
+step "5/19  aws-load-balancer-controller"
 helm_install aws-load-balancer-controller kube-system \
   "${CHARTS}/aws-load-balancer-controller" \
   -f "${VALUES}/aws-lb-controller-values.yaml"
 
 # ─── 6. metrics-server ───────────────────────────────────────────────────────
-step "6/18  metrics-server"
+step "6/19  metrics-server"
 helm_install metrics-server kube-system \
   "${CHARTS}/metrics-server" \
   -f "${VALUES}/metrics-server-values.yaml"
 
 # ─── 7. cluster-autoscaler ───────────────────────────────────────────────────
-step "7/18  cluster-autoscaler"
+step "7/19  cluster-autoscaler"
 helm_install cluster-autoscaler kube-system \
   "${CHARTS}/cluster-autoscaler" \
   -f "${VALUES}/cluster-autoscaler-values.yaml"
 
 # ─── 8. external-dns ─────────────────────────────────────────────────────────
-step "8/18  external-dns"
+step "8/19  external-dns"
 helm_install external-dns external-dns \
   "${CHARTS}/external-dns" \
   -f "${VALUES}/external-dns-values.yaml"
 
 # ─── 9. linkerd-crds ─────────────────────────────────────────────────────────
-step "9/18  linkerd-crds"
+step "9/19  linkerd-crds"
 helm_install linkerd-crds linkerd \
   "${CHARTS}/linkerd-crds"
 
 # ─── 9b. linkerd-identity-issuer secret ──────────────────────────────────────
 # Linkerd reads issuer certs from a pre-existing k8s TLS secret.
 # Certs are stored in Secrets Manager (intelliops/dev/linkerd) as base64 fields.
-step "9b/18  linkerd-identity-issuer secret"
+step "9b/19  linkerd-identity-issuer secret"
 
 if kubectl get secret linkerd-identity-issuer -n linkerd &>/dev/null; then
   warn "linkerd-identity-issuer already exists — skipping"
@@ -175,50 +176,50 @@ else
 fi
 
 # ─── 10. linkerd-control-plane ───────────────────────────────────────────────
-step "10/18  linkerd-control-plane"
+step "10/19  linkerd-control-plane"
 helm_install linkerd-control-plane linkerd \
   "${CHARTS}/linkerd-control-plane" \
   -f "${VALUES}/linkerd-control-plane-values.yaml"
 
 # ─── 11. argocd ──────────────────────────────────────────────────────────────
-step "11/18  argocd"
+step "11/19  argocd"
 helm_install argocd argocd \
   "${CHARTS}/argo-cd" \
   -f "${VALUES}/argocd-values.yaml"
 
 # ─── 12. kube-prometheus-stack ───────────────────────────────────────────────
-step "12/18  kube-prometheus-stack"
+step "12/19  kube-prometheus-stack"
 helm_install kube-prometheus-stack monitoring \
   "${CHARTS}/kube-prometheus-stack" \
   -f "${VALUES}/kube-prometheus-values.yaml" \
   --timeout 10m
 
 # ─── 13. loki ────────────────────────────────────────────────────────────────
-step "13/18  loki"
+step "13/19  loki"
 helm_install loki monitoring \
   "${CHARTS}/loki-stack" \
   -f "${VALUES}/loki-values.yaml"
 
 # ─── 14. tempo ───────────────────────────────────────────────────────────────
-step "14/18  tempo"
+step "14/19  tempo"
 helm_install tempo monitoring \
   "${CHARTS}/tempo" \
   -f "${VALUES}/tempo-values.yaml"
 
 # ─── 15. otel-collector ──────────────────────────────────────────────────────
-step "15/18  otel-collector"
+step "15/19  otel-collector"
 helm_install otel-collector monitoring \
   "${CHARTS}/opentelemetry-collector" \
   -f "${VALUES}/otel-collector-values.yaml"
 
 # ─── 16. kong ────────────────────────────────────────────────────────────────
-step "16/18  kong"
+step "16/19  kong"
 helm_install kong kong \
   "${CHARTS}/kong" \
   -f "${VALUES}/kong-values.yaml"
 
 # ─── 16b. Kong IngressClass + ingress routes ─────────────────────────────────
-step "16b/18  Kong IngressClass + service ingresses"
+step "16b/19  Kong IngressClass + service ingresses"
 
 info "Applying Kong IngressClass ..."
 kubectl apply -f "${INGRESS}/kong-ingress-class.yaml"
@@ -235,21 +236,29 @@ kubectl apply -f "${INGRESS}/ingress-sonarqube.yaml"
 kubectl apply -f "${INGRESS}/ingress-apps.yaml"
 kubectl apply -f "${INGRESS}/ingress-locust.yaml"
 kubectl apply -f "${INGRESS}/ingress-kong-admin.yaml"
+kubectl apply -f "${INGRESS}/ingress-defectdojo.yaml"
 
 success "IngressClass and all service ingresses applied"
 
 # ─── 17. falco ───────────────────────────────────────────────────────────────
-step "17/18  falco"
+step "17/19  falco"
 helm_install falco falco \
   "${CHARTS}/falco" \
   -f "${VALUES}/falco-values.yaml"
 
 # ─── 18. sonarqube ───────────────────────────────────────────────────────────
-step "18/18  sonarqube"
+step "18/19  sonarqube"
 helm_install sonarqube sonarqube \
   "${CHARTS}/sonarqube" \
   -f "${VALUES}/sonarqube-values.yaml" \
   --timeout 10m
+
+# ─── 19. defectdojo ──────────────────────────────────────────────────────────
+step "19/19  defectdojo"
+helm_install defectdojo defectdojo \
+  "${CHARTS}/defectdojo" \
+  -f "${VALUES}/defectdojo-values.yaml" \
+  --timeout 15m
 
 # ─── Verify ───────────────────────────────────────────────────────────────────
 step "Verification"

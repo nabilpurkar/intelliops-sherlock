@@ -86,3 +86,8 @@ output "linkerd_secret_arn" {
   description = "ARN of the Linkerd mTLS certs secret"
   value       = module.secrets.linkerd_secret_arn
 }
+
+output "defectdojo_secret_arn" {
+  description = "ARN of the DefectDojo credentials secret"
+  value       = module.secrets.defectdojo_secret_arn
+}

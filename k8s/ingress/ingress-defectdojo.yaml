@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: defectdojo
+  namespace: defectdojo
+  annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
+    konghq.com/strip-path: "false"
+spec:
+  ingressClassName: kong
+  rules:
+    - host: defectdojo.infrastructurepath.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: defectdojo-django
+                port:
+                  number: 80

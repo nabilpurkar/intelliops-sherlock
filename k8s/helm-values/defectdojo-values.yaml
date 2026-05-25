@@ -1,0 +1,97 @@
+# chart: defectdojo/defectdojo version 1.9.28 (app 2.58.3)
+# install: helm upgrade --install defectdojo k8s/helm-charts/defectdojo -n defectdojo --create-namespace -f k8s/helm-values/defectdojo-values.yaml --timeout 15m
+
+host: defectdojo.infrastructurepath.online
+
+# Secrets are pre-created by ExternalSecrets from Secrets Manager.
+# The chart must NOT recreate them — setting all createSecret flags to false.
+createSecret: false
+createPostgresqlSecret: false
+createValkeySecret: false
+
+admin:
+  user: admin
+  firstName: Administrator
+  lastName: User
+  mail: admin@defectdojo.local
+
+# Use the shared PostgreSQL instance (postgresql.database.svc.cluster.local).
+# The defectdojo database and user are already provisioned in that cluster.
+# Password is sourced from intelliops/dev/postgresql → defectdojo_password via ExternalSecrets.
+postgresql:
+  enabled: false
+  auth:
+    username: defectdojo
+    database: defectdojo
+    existingSecret: defectdojo-postgresql-specific
+    secretKeys:
+      userPasswordKey: postgresql-password
+  primary:
+    service:
+      ports:
+        postgresql: 5432
+
+postgresServer: postgresql.database.svc.cluster.local
+
+django:
+  replicas: 1
+
+  # Disable the chart's built-in ingress — Kong handles routing via ingress-defectdojo.yaml
+  ingress:
+    enabled: false
+
+  # No TLS at the pod level — Kong + ALB handle TLS termination
+  nginx:
+    tls:
+      enabled: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+  uwsgi:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+celery:
+  beat:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  worker:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+
+# Bundled Valkey (Redis-compatible) for Celery task queue and caching.
+# Persistence disabled for dev — valkey is a cache/queue, emptyDir is fine.
+valkey:
+  enabled: true
+  auth:
+    existingSecret: defectdojo-valkey-specific
+    existingSecretPasswordKey: valkey-password
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
