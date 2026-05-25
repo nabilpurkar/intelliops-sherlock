@@ -1,0 +1,5 @@
+# chart: grafana/tempo
+# install: helm upgrade --install tempo grafana/tempo -n monitoring --create-namespace -f tempo-values.yaml
+
+persistence:
+  enabled: false

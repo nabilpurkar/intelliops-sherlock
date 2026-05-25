@@ -1,0 +1,19 @@
+# chart: argo/argo-cd version 9.5.15
+# install: helm upgrade --install argocd argo/argo-cd --version 9.5.15 -n argocd --create-namespace -f argocd-values.yaml
+
+global:
+  domain: argocd.infrastructurepath.online
+
+configs:
+  params:
+    server.insecure: "true"
+
+server:
+  ingress:
+    enabled: false
+
+ha:
+  enabled: false
+
+redis-ha:
+  enabled: false

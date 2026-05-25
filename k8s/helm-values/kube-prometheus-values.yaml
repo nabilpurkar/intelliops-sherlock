@@ -1,0 +1,24 @@
+# chart: prometheus-community/kube-prometheus-stack version 85.3.3
+# install: helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --version 85.3.3 -n monitoring --create-namespace -f kube-prometheus-values.yaml
+
+grafana:
+  adminPassword: PLACEHOLDER_GRAFANA_PASSWORD
+  ingress:
+    enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          resources:
+            requests:
+              storage: 20Gi
+
+alertmanager:
+  enabled: true
+
+nodeExporter:
+  enabled: true

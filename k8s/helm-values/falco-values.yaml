@@ -1,0 +1,14 @@
+# chart: falco/falco
+# install: helm upgrade --install falco falco/falco -n falco --create-namespace -f falco-values.yaml
+
+driver:
+  kind: modern_ebpf
+
+falcosidekick:
+  enabled: true
+  webui:
+    enabled: true
+
+collectors:
+  kubernetes:
+    enabled: true

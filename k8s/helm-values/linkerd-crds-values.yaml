@@ -1,0 +1,3 @@
+# chart: linkerd/linkerd-crds version 1.8.0
+# install: helm upgrade --install linkerd-crds linkerd/linkerd-crds --version 1.8.0 -n linkerd --create-namespace -f linkerd-crds-values.yaml
+# Must be installed before linkerd-control-plane.

@@ -1,0 +1,9 @@
+# chart: cert-manager/cert-manager version v1.20.2
+# install: helm upgrade --install cert-manager cert-manager/cert-manager --version v1.20.2 -n cert-manager --create-namespace -f cert-manager-values.yaml
+
+installCRDs: true
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: PLACEHOLDER_CERT_MANAGER_ROLE

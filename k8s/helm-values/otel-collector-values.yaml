@@ -1,0 +1,35 @@
+# chart: open-telemetry/opentelemetry-collector
+# install: helm upgrade --install otel-collector open-telemetry/opentelemetry-collector -n monitoring --create-namespace -f otel-collector-values.yaml
+
+mode: deployment
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+  exporters:
+    prometheus:
+      endpoint: 0.0.0.0:8889
+    loki:
+      endpoint: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+    otlp/tempo:
+      endpoint: http://tempo.monitoring.svc.cluster.local:4317
+      tls:
+        insecure: true
+
+  service:
+    pipelines:
+      metrics:
+        receivers: [otlp]
+        exporters: [prometheus]
+      logs:
+        receivers: [otlp]
+        exporters: [loki]
+      traces:
+        receivers: [otlp]
+        exporters: [otlp/tempo]

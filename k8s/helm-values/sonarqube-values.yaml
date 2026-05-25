@@ -1,0 +1,16 @@
+# chart: sonarqube/sonarqube
+# install: helm upgrade --install sonarqube sonarqube/sonarqube -n sonarqube --create-namespace -f sonarqube-values.yaml
+
+persistence:
+  enabled: false
+
+service:
+  type: ClusterIP
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 1Gi
+  limits:
+    cpu: 800m
+    memory: 2Gi

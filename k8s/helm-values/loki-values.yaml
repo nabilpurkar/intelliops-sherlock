@@ -1,0 +1,12 @@
+# chart: grafana/loki-stack
+# install: helm upgrade --install loki grafana/loki-stack -n monitoring --create-namespace -f loki-values.yaml
+
+promtail:
+  enabled: true
+
+grafana:
+  enabled: false
+
+loki:
+  persistence:
+    enabled: false

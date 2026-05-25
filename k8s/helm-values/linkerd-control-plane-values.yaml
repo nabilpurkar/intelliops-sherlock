@@ -1,0 +1,15 @@
+# chart: linkerd/linkerd-control-plane version 1.16.11
+# install: helm upgrade --install linkerd-control-plane linkerd/linkerd-control-plane --version 1.16.11 -n linkerd --create-namespace -f linkerd-control-plane-values.yaml
+# Prerequisite: trust anchor cert must exist in the cluster as a TLS secret named linkerd-trust-anchor.
+# Generate with: step certificate create root.linkerd.cluster.local ca.crt ca.key --profile root-CA --no-password --insecure
+
+controllerLogLevel: info
+
+identityTrustAnchorsPEM: PLACEHOLDER_TRUST_ANCHOR
+
+identity:
+  issuer:
+    scheme: kubernetes.io/tls
+
+proxyInit:
+  runAsRoot: true
