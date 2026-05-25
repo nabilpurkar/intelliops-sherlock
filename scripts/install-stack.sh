@@ -27,7 +27,6 @@ MANIFESTS="${REPO_ROOT}/k8s/external-secrets"
 helm_install() {
   local release=$1 namespace=$2 chart=$3
   shift 3
-  # remaining args are extra flags / --set / -f
 
   if helm status "${release}" -n "${namespace}" &>/dev/null; then
     warn "${release} already installed in ${namespace} — skipping"
@@ -46,14 +45,47 @@ helm_install() {
 # ─── Pre-flight ───────────────────────────────────────────────────────────────
 step "Pre-flight checks"
 
-command -v helm   &>/dev/null || die "helm not found in PATH"
+command -v helm    &>/dev/null || die "helm not found in PATH"
 command -v kubectl &>/dev/null || die "kubectl not found in PATH"
+command -v aws     &>/dev/null || die "aws CLI not found in PATH"
+command -v python3 &>/dev/null || die "python3 not found in PATH"
 
 kubectl cluster-info &>/dev/null || die "kubectl cannot reach the cluster — run: aws eks update-kubeconfig --name intelliops-dev --region us-east-1"
 
 info "Cluster reachable"
 info "Charts dir : ${CHARTS}"
 info "Values dir : ${VALUES}"
+
+# ─── Fetch secrets from AWS Secrets Manager ───────────────────────────────────
+step "Fetching credentials from AWS Secrets Manager"
+
+PG_JSON=$(aws secretsmanager get-secret-value \
+  --secret-id intelliops/dev/postgresql \
+  --query SecretString --output text)
+
+GRAFANA_JSON=$(aws secretsmanager get-secret-value \
+  --secret-id intelliops/dev/grafana \
+  --query SecretString --output text)
+
+PG_PASS=$(echo "${PG_JSON}"     | python3 -c "import sys,json; print(json.load(sys.stdin)['postgres_password'])")
+SONAR_PASS=$(echo "${PG_JSON}"  | python3 -c "import sys,json; print(json.load(sys.stdin)['sonarqube_password'])")
+DOJO_PASS=$(echo "${PG_JSON}"   | python3 -c "import sys,json; print(json.load(sys.stdin)['defectdojo_password'])")
+KONG_PASS=$(echo "${PG_JSON}"   | python3 -c "import sys,json; print(json.load(sys.stdin)['kong_password'])")
+GRAFANA_PASS=$(echo "${GRAFANA_JSON}" | python3 -c "import sys,json; print(json.load(sys.stdin)['admin_password'])")
+
+success "All credentials fetched"
+
+# ─── Pre-create namespaces ────────────────────────────────────────────────────
+step "Pre-creating namespaces"
+
+for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco; do
+  if kubectl get namespace "${ns}" &>/dev/null; then
+    warn "Namespace ${ns} already exists — skipping"
+  else
+    kubectl create namespace "${ns}"
+    success "Created namespace: ${ns}"
+  fi
+done
 
 # ─── 1. cert-manager ──────────────────────────────────────────────────────────
 step "1/15  cert-manager"
@@ -79,19 +111,55 @@ kubectl apply -f "${MANIFESTS}/postgresql-secret.yaml"
 kubectl apply -f "${MANIFESTS}/grafana-secret.yaml"
 kubectl apply -f "${MANIFESTS}/argocd-secret.yaml"
 
-info "Waiting 30 s for secrets to sync from AWS Secrets Manager ..."
-sleep 30
+info "Waiting 45 s for secrets to sync from AWS Secrets Manager ..."
+sleep 45
 
 info "Checking ExternalSecret status ..."
 kubectl get externalsecret -A 2>/dev/null || true
+
+# ─── 3b. Create postgresql-initdb-scripts secret ─────────────────────────────
+step "3b/15  postgresql initdb scripts secret"
+
+if kubectl get secret postgresql-initdb-scripts -n database &>/dev/null; then
+  warn "postgresql-initdb-scripts already exists — skipping"
+else
+  info "Creating postgresql-initdb-scripts secret with actual DB passwords ..."
+  kubectl create secret generic postgresql-initdb-scripts \
+    --namespace database \
+    --from-literal=init.sql="$(cat <<SQL
+CREATE DATABASE IF NOT EXISTS sonarqube;
+DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sonarqube') THEN
+    CREATE USER sonarqube WITH PASSWORD '${SONAR_PASS}';
+  END IF;
+END \$\$;
+GRANT ALL PRIVILEGES ON DATABASE sonarqube TO sonarqube;
+
+CREATE DATABASE IF NOT EXISTS defectdojo;
+DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'defectdojo') THEN
+    CREATE USER defectdojo WITH PASSWORD '${DOJO_PASS}';
+  END IF;
+END \$\$;
+GRANT ALL PRIVILEGES ON DATABASE defectdojo TO defectdojo;
+
+CREATE DATABASE IF NOT EXISTS kong;
+DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kong') THEN
+    CREATE USER kong WITH PASSWORD '${KONG_PASS}';
+  END IF;
+END \$\$;
+GRANT ALL PRIVILEGES ON DATABASE kong TO kong;
+SQL
+)"
+  success "postgresql-initdb-scripts secret created"
+fi
 
 # ─── 4. postgresql ────────────────────────────────────────────────────────────
 step "4/15  postgresql"
 helm_install postgresql database \
   "${CHARTS}/postgresql" \
-  -f "${VALUES}/postgresql-values.yaml" \
-  --set auth.existingSecret=postgresql-credentials \
-  --set auth.secretKeys.adminPasswordKey=postgres-password
+  -f "${VALUES}/postgresql-values.yaml"
 
 # ─── 5. aws-load-balancer-controller ─────────────────────────────────────────
 step "5/15  aws-load-balancer-controller"
@@ -107,30 +175,25 @@ helm_install linkerd-crds linkerd \
 # ─── 6b. linkerd-identity-issuer secret ──────────────────────────────────────
 step "6b/15  linkerd-identity-issuer secret"
 
-LINKERD_SECRET_NAME="intelliops/dev/linkerd"
-LINKERD_NS="linkerd"
-ISSUER_SECRET="linkerd-identity-issuer"
+LINKERD_ISSUER_SECRET="linkerd-identity-issuer"
 
-if kubectl get secret "${ISSUER_SECRET}" -n "${LINKERD_NS}" &>/dev/null; then
-  warn "${ISSUER_SECRET} already exists in ${LINKERD_NS} — skipping"
+if kubectl get secret "${LINKERD_ISSUER_SECRET}" -n linkerd &>/dev/null; then
+  warn "${LINKERD_ISSUER_SECRET} already exists in linkerd — skipping"
 else
-  info "Fetching Linkerd certs from AWS Secrets Manager (${LINKERD_SECRET_NAME}) ..."
+  info "Fetching Linkerd certs from AWS Secrets Manager ..."
   LINKERD_JSON=$(aws secretsmanager get-secret-value \
-    --secret-id "${LINKERD_SECRET_NAME}" \
-    --query SecretString \
-    --output text)
+    --secret-id intelliops/dev/linkerd \
+    --query SecretString --output text)
 
   ISSUER_CRT=$(echo "${LINKERD_JSON}" | python3 -c "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_crt']).decode())")
   ISSUER_KEY=$(echo "${LINKERD_JSON}" | python3 -c "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_key']).decode())")
 
-  kubectl create namespace "${LINKERD_NS}" --dry-run=client -o yaml | kubectl apply -f -
-
-  kubectl create secret tls "${ISSUER_SECRET}" \
-    --namespace "${LINKERD_NS}" \
+  kubectl create secret tls "${LINKERD_ISSUER_SECRET}" \
+    --namespace linkerd \
     --cert=<(echo "${ISSUER_CRT}") \
     --key=<(echo "${ISSUER_KEY}")
 
-  success "${ISSUER_SECRET} created in ${LINKERD_NS}"
+  success "${LINKERD_ISSUER_SECRET} created in linkerd"
 fi
 
 # ─── 7. linkerd-control-plane ────────────────────────────────────────────────
@@ -150,6 +213,7 @@ step "9/15  kube-prometheus-stack"
 helm_install kube-prometheus-stack monitoring \
   "${CHARTS}/kube-prometheus-stack" \
   -f "${VALUES}/kube-prometheus-values.yaml" \
+  --set grafana.adminPassword="${GRAFANA_PASS}" \
   --timeout 10m
 
 # ─── 10. loki ────────────────────────────────────────────────────────────────
@@ -174,7 +238,8 @@ helm_install otel-collector monitoring \
 step "13/15  kong"
 helm_install kong kong \
   "${CHARTS}/kong" \
-  -f "${VALUES}/kong-values.yaml"
+  -f "${VALUES}/kong-values.yaml" \
+  --set "env.pg_password=${KONG_PASS}"
 
 # ─── 14. falco ───────────────────────────────────────────────────────────────
 step "14/15  falco"
@@ -187,6 +252,7 @@ step "15/15  sonarqube"
 helm_install sonarqube sonarqube \
   "${CHARTS}/sonarqube" \
   -f "${VALUES}/sonarqube-values.yaml" \
+  --set "jdbcOverwrite.jdbcPassword=${SONAR_PASS}" \
   --timeout 10m
 
 # ─── Verify ───────────────────────────────────────────────────────────────────
@@ -204,6 +270,11 @@ echo -e "${BOLD}$(printf '%-35s %-20s %-10s %s\n' RELEASE NAMESPACE STATUS CHART
 helm list -A --no-headers \
   | awk '{printf "%-35s %-20s %-10s %s\n", $1, $2, $5, $9}' \
   | sort
+
+echo ""
+info "ArgoCD initial admin password (if auto-generated):"
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" 2>/dev/null | base64 -d && echo || true
 
 echo ""
 success "Stack installation complete"

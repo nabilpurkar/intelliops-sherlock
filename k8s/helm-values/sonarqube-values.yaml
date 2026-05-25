@@ -23,4 +23,4 @@ jdbcOverwrite:
   enable: true
   jdbcUrl: jdbc:postgresql://postgresql.database.svc.cluster.local:5432/sonarqube
   jdbcUsername: sonarqube
-  jdbcPassword: PLACEHOLDER_SONAR_DB_PASS
+  # jdbcPassword injected at install time via --set from AWS Secrets Manager

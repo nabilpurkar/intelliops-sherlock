@@ -3,23 +3,15 @@
 
 auth:
   username: postgres
-  password: PLACEHOLDER_PG_PASSWORD
+  existingSecret: postgresql-credentials
+  secretKeys:
+    adminPasswordKey: postgres-password
   database: postgres
 
+# initdb SQL with real passwords is injected at install time by scripts/install-stack.sh
+# via a k8s Secret (postgresql-initdb-scripts) fetched from AWS Secrets Manager.
 initdb:
-  scripts:
-    init.sql: |
-      CREATE DATABASE sonarqube;
-      CREATE USER sonarqube WITH PASSWORD 'PLACEHOLDER_SONAR_DB_PASS';
-      GRANT ALL PRIVILEGES ON DATABASE sonarqube TO sonarqube;
-
-      CREATE DATABASE defectdojo;
-      CREATE USER defectdojo WITH PASSWORD 'PLACEHOLDER_DOJO_DB_PASS';
-      GRANT ALL PRIVILEGES ON DATABASE defectdojo TO defectdojo;
-
-      CREATE DATABASE kong;
-      CREATE USER kong WITH PASSWORD 'PLACEHOLDER_KONG_DB_PASS';
-      GRANT ALL PRIVILEGES ON DATABASE kong TO kong;
+  scriptsSecret: postgresql-initdb-scripts
 
 primary:
   persistence:

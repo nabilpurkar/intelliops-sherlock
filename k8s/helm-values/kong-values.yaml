@@ -24,4 +24,4 @@ env:
   pg_port: "5432"
   pg_database: kong
   pg_user: kong
-  pg_password: PLACEHOLDER_KONG_DB_PASS
+  # pg_password injected at install time via --set from AWS Secrets Manager
