@@ -1,0 +1,5 @@
+[allowlist]
+  description = "Vendor helm charts contain example/placeholder values, not real secrets"
+  paths = [
+    '''k8s/helm-charts/''',
+  ]

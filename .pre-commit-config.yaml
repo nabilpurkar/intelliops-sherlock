@@ -3,16 +3,23 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^k8s/helm-charts/
       - id: end-of-file-fixer
+        exclude: ^k8s/helm-charts/
       - id: check-yaml
         args: ["--allow-multiple-documents"]
+        exclude: ^k8s/helm-charts/
       - id: check-json
+        exclude: ^k8s/helm-charts/
       - id: detect-private-key
+        exclude: ^k8s/helm-charts/
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.18.2
     hooks:
       - id: gitleaks
+        args: ["--config=.gitleaks.toml"]
+        exclude: ^k8s/helm-charts/
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: v1.88.0
