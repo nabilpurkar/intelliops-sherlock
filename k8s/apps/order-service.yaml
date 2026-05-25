@@ -126,13 +126,13 @@ spec:
       resource:
         name: cpu
         target:
-          type: AverageUtilization
+          type: Utilization
           averageUtilization: 60
     - type: Resource
       resource:
         name: memory
         target:
-          type: AverageUtilization
+          type: Utilization
           averageUtilization: 70
   behavior:
     scaleUp:
