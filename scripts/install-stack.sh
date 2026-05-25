@@ -107,6 +107,7 @@ kubectl apply -f "${MANIFESTS}/argocd-secret.yaml"
 kubectl apply -f "${MANIFESTS}/kong-secret.yaml"
 kubectl apply -f "${MANIFESTS}/sonarqube-secret.yaml"
 kubectl apply -f "${MANIFESTS}/defectdojo-secret.yaml"
+kubectl apply -f "${MANIFESTS}/falco-defectdojo-secret.yaml"
 
 info "Waiting 60 s for secrets to sync from AWS Secrets Manager ..."
 sleep 60

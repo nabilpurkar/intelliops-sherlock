@@ -10,6 +10,20 @@ falcosidekick:
     enabled: true
     redis:
       storageClass: gp2
+  config:
+    defectdojo:
+      url: "https://defectdojo.infrastructurepath.online"
+      importscanrepeatedly: true
+      minimumpriority: "warning"
+  # API key injected from k8s secret via ExternalSecret (see falco-defectdojo-secret.yaml)
+  # Prerequisite: populate intelliops/dev/defectdojo.api_key in AWS Secrets Manager
+  # with the DefectDojo API v2 token (Profile → API v2 Key in DefectDojo UI)
+  extraEnvs:
+    - name: DEFECTDOJO_APIKEY
+      valueFrom:
+        secretKeyRef:
+          name: falco-defectdojo-apikey
+          key: api_key
 
 collectors:
   kubernetes:

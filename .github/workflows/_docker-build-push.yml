@@ -22,6 +22,12 @@ on:
         description: Docker image tag (git SHA)
         type: string
         required: true
+    secrets:
+      defectdojo_api_key:
+        required: false
+
+env:
+  DEFECTDOJO_URL: https://defectdojo.infrastructurepath.online
 
 permissions:
   id-token: write
@@ -73,6 +79,23 @@ jobs:
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image-${{ inputs.service }}
+
+      - name: Upload Trivy image scan to DefectDojo
+        if: always()
+        env:
+          DEFECTDOJO_API_KEY: ${{ secrets.defectdojo_api_key }}
+        run: |
+          [ -z "${DEFECTDOJO_API_KEY}" ] && exit 0
+          curl -sf -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=SARIF" \
+            -F "file=@trivy-image.sarif" \
+            -F "product_name=IntelliOps Sherlock" \
+            -F "engagement_name=CI Pipeline - Trivy Image (${{ inputs.service }})" \
+            -F "auto_create_context=true" \
+            -F "active=true" \
+            -F "verified=false" \
+            -F "branch_tag=${{ github.sha }}" || true
 
       - name: Build and push multi-platform image
         uses: docker/build-push-action@v6

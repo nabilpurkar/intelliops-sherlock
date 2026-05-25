@@ -62,6 +62,9 @@ jobs:
     uses: ./.github/workflows/_security-scan.yml
     with:
       terraform_changed: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+    secrets:
+      sonar_token: ${{ secrets.SONAR_TOKEN }}
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
     permissions:
       contents: read
       security-events: write
@@ -82,6 +85,8 @@ jobs:
       aws_account_id: "007066145518"
       role_arn: arn:aws:iam::007066145518:role/github-actions-role
       image_tag: ${{ github.sha }}
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
     permissions:
       id-token: write
       contents: read
