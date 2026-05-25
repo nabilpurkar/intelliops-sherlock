@@ -43,3 +43,23 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# ─── EKS IRSA variables ───────────────────────────────────────────────────────
+
+variable "eks_oidc_provider_arn" {
+  description = "OIDC provider ARN from the EKS module — required to create IRSA trust policies"
+  type        = string
+  default     = ""
+}
+
+variable "eks_oidc_provider_url" {
+  description = "OIDC issuer URL without https:// from the EKS module (e.g. oidc.eks.us-east-1.amazonaws.com/id/XXX)"
+  type        = string
+  default     = ""
+}
+
+variable "cluster_name" {
+  description = "EKS cluster name — used as prefix in IRSA role names"
+  type        = string
+  default     = ""
+}

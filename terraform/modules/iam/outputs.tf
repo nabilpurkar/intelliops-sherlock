@@ -12,3 +12,18 @@ output "oidc_provider_arn" {
   description = "GitHub OIDC provider ARN"
   value       = local.oidc_provider_arn
 }
+
+output "alb_controller_role_arn" {
+  description = "IRSA role ARN for the AWS Load Balancer Controller"
+  value       = var.eks_oidc_provider_arn != "" ? aws_iam_role.alb_controller[0].arn : ""
+}
+
+output "external_secrets_role_arn" {
+  description = "IRSA role ARN for External Secrets Operator"
+  value       = var.eks_oidc_provider_arn != "" ? aws_iam_role.external_secrets[0].arn : ""
+}
+
+output "cert_manager_role_arn" {
+  description = "IRSA role ARN for cert-manager"
+  value       = var.eks_oidc_provider_arn != "" ? aws_iam_role.cert_manager[0].arn : ""
+}

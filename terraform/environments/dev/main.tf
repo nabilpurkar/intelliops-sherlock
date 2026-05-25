@@ -56,6 +56,11 @@ module "iam" {
   create_oidc_provider = true
   environment          = "dev"
   project              = "intelliops"
+
+  # EKS IRSA — wired from EKS module outputs
+  eks_oidc_provider_arn = module.eks.oidc_provider_arn
+  eks_oidc_provider_url = module.eks.oidc_provider_url
+  cluster_name          = module.eks.cluster_name
 }
 
 module "eks" {
