@@ -69,7 +69,7 @@ module "secrets" {
 
   environment             = "dev"
   project                 = "intelliops"
-  recovery_window_in_days = 7
+  recovery_window_in_days = 0
   # kms_key_id — omitted for dev (uses aws/secretsmanager managed key)
   # pass module.eks.kms_key_arn here for staging/prod once KMS is enabled
 }
