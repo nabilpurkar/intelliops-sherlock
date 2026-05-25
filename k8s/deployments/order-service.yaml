@@ -35,7 +35,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: order-service
-          image: your-registry/order-service:latest   # ← replace with your ECR/registry
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/order-service:latest
           imagePullPolicy: Always
           ports:
             - name: http

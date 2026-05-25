@@ -34,7 +34,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: inventory-service
-          image: your-registry/inventory-service:latest   # ← replace
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/inventory-service:latest
           imagePullPolicy: Always
           ports:
             - name: http

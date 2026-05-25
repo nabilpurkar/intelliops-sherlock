@@ -19,7 +19,7 @@ spec:
       serviceAccountName: aiops-demo-sa
       containers:
         - name: load-generator
-          image: your-registry/load-generator:latest   # ← replace
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/load-generator:latest
           imagePullPolicy: Always
           ports:
             - name: web-ui

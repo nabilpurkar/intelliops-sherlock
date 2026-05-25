@@ -34,7 +34,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: payment-service
-          image: your-registry/payment-service:latest   # ← replace
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/payment-service:latest
           imagePullPolicy: Always
           ports:
             - name: http
