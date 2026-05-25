@@ -18,4 +18,4 @@ spec:
               service:
                 name: kong-kong-admin
                 port:
-                  number: 8001
+                  number: 8444
