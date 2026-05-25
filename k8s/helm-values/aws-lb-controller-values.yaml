@@ -3,8 +3,8 @@
 
 clusterName: intelliops-dev
 region: us-east-1
-# vpcId is intentionally omitted — controller auto-discovers it from EKS node metadata.
-# Hardcoding it would break on every destroy+recreate since VPC ID changes.
+# vpcId is injected dynamically by install-stack.sh via --set vpcId=...
+# (reads from 'aws eks describe-cluster' so it never needs hardcoding)
 
 serviceAccount:
   create: true

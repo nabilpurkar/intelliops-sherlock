@@ -123,9 +123,19 @@ helm_install postgresql database \
 
 # ─── 5. aws-load-balancer-controller ─────────────────────────────────────────
 step "5/19  aws-load-balancer-controller"
+
+# Resolve VPC ID at runtime — avoids hardcoding a value that changes on recreate.
+# IMDS hop limit is 1 (pods can't reach it), so the controller can't auto-discover.
+ALB_VPC_ID=$(aws eks describe-cluster \
+  --name intelliops-dev \
+  --query 'cluster.resourcesVpcConfig.vpcId' \
+  --output text 2>/dev/null) || die "Failed to resolve VPC ID from EKS cluster"
+info "ALB controller VPC ID: ${ALB_VPC_ID}"
+
 helm_install aws-load-balancer-controller kube-system \
   "${CHARTS}/aws-load-balancer-controller" \
-  -f "${VALUES}/aws-lb-controller-values.yaml"
+  -f "${VALUES}/aws-lb-controller-values.yaml" \
+  --set vpcId="${ALB_VPC_ID}"
 
 # ─── 6. metrics-server ───────────────────────────────────────────────────────
 step "6/19  metrics-server"
