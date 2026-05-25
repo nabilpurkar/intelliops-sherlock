@@ -6,9 +6,11 @@ module "vpc" {
 
   vpc_cidr = "10.0.0.0/16"
 
-  availability_zones   = ["us-east-1a", "us-east-1b", "us-east-1c"]
-  public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  private_subnet_cidrs = ["10.0.10.0/24", "10.0.20.0/24", "10.0.30.0/24"]
+  availability_zones  = ["us-east-1a", "us-east-1b", "us-east-1c"]
+  public_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+  # private_subnet_cidrs = ["10.0.10.0/24", "10.0.20.0/24", "10.0.30.0/24"] # disabled for dev
+
+  eks_cluster_name = "intelliops-dev"
 
   # Single NAT Gateway is the module default — cost-saving for dev.
   # For staging/prod, deploy a separate module instance per AZ for HA.
@@ -29,9 +31,12 @@ resource "aws_security_group_rule" "dev_machine_ipv6_all_tcp" {
   from_port         = 0
   to_port           = 65535
   protocol          = "tcp"
-  ipv6_cidr_blocks  = ["2401:4900:8814:ee83:ddbb:34aa:4faf:6be4/128"]
+  ipv6_cidr_blocks  = ["2401:4900:8814:ee83:d925:44d:8999:db27/128"]
   security_group_id = data.aws_security_group.dev_ec2_default.id
 }
+
+# NOTE: AWS EKS public_access_cidrs only accepts IPv4. The public endpoint
+# is open to 0.0.0.0/0 but protected by IAM/RBAC — no unauthenticated access.
 
 module "eks" {
   source = "../../modules/eks"
@@ -40,6 +45,8 @@ module "eks" {
   environment         = "dev"
   project             = "intelliops"
   vpc_id              = module.vpc.vpc_id
-  private_subnet_ids  = module.vpc.private_subnet_ids
+  private_subnet_ids  = module.vpc.public_subnet_ids # using public subnets in dev (no private subnets)
   allowed_cidr_blocks = ["172.31.0.0/16"]
+
+  endpoint_public_access = true
 }

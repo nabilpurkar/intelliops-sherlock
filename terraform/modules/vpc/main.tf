@@ -63,44 +63,45 @@ resource "aws_subnet" "public" {
   )
 }
 
-# ─── Private Subnets ──────────────────────────────────────────────────────────
+# ─── Private Subnets (disabled for dev) ──────────────────────────────────────
+# Uncomment for staging/prod along with the NAT Gateway and private route table.
 
-resource "aws_subnet" "private" {
-  count = length(var.private_subnet_cidrs)
+# resource "aws_subnet" "private" {
+#   count = length(var.private_subnet_cidrs)
+#
+#   vpc_id            = aws_vpc.main.id
+#   cidr_block        = var.private_subnet_cidrs[count.index]
+#   availability_zone = var.availability_zones[count.index]
+#
+#   tags = merge(
+#     local.common_tags,
+#     local.eks_shared_tag,
+#     {
+#       Name                              = "${var.project}-${var.environment}-private-${count.index + 1}"
+#       Tier                              = "private"
+#       "kubernetes.io/role/internal-elb" = "1"
+#     }
+#   )
+# }
 
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = var.private_subnet_cidrs[count.index]
-  availability_zone = var.availability_zones[count.index]
+# ─── NAT Gateway (disabled — no private subnets in dev) ──────────────────────
 
-  tags = merge(
-    local.common_tags,
-    local.eks_shared_tag,
-    {
-      Name                              = "${var.project}-${var.environment}-private-${count.index + 1}"
-      Tier                              = "private"
-      "kubernetes.io/role/internal-elb" = "1"
-    }
-  )
-}
-
-# ─── NAT Gateway (single, cost-saving for dev) ────────────────────────────────
-
-resource "aws_eip" "nat" {
-  domain = "vpc"
-
-  tags = merge(local.common_tags, { Name = "${var.project}-${var.environment}-nat-eip" })
-
-  depends_on = [aws_internet_gateway.main]
-}
-
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-
-  tags = merge(local.common_tags, { Name = "${var.project}-${var.environment}-nat-gw" })
-
-  depends_on = [aws_internet_gateway.main]
-}
+# resource "aws_eip" "nat" {
+#   domain = "vpc"
+#
+#   tags = merge(local.common_tags, { Name = "${var.project}-${var.environment}-nat-eip" })
+#
+#   depends_on = [aws_internet_gateway.main]
+# }
+#
+# resource "aws_nat_gateway" "main" {
+#   allocation_id = aws_eip.nat.id
+#   subnet_id     = aws_subnet.public[0].id
+#
+#   tags = merge(local.common_tags, { Name = "${var.project}-${var.environment}-nat-gw" })
+#
+#   depends_on = [aws_internet_gateway.main]
+# }
 
 # ─── Route Tables ─────────────────────────────────────────────────────────────
 
@@ -115,16 +116,16 @@ resource "aws_route_table" "public" {
   tags = merge(local.common_tags, { Name = "${var.project}-${var.environment}-public-rt" })
 }
 
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main.id
-  }
-
-  tags = merge(local.common_tags, { Name = "${var.project}-${var.environment}-private-rt" })
-}
+# resource "aws_route_table" "private" {
+#   vpc_id = aws_vpc.main.id
+#
+#   route {
+#     cidr_block     = "0.0.0.0/0"
+#     nat_gateway_id = aws_nat_gateway.main.id
+#   }
+#
+#   tags = merge(local.common_tags, { Name = "${var.project}-${var.environment}-private-rt" })
+# }
 
 resource "aws_route_table_association" "public" {
   count = length(aws_subnet.public)
@@ -133,12 +134,12 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-resource "aws_route_table_association" "private" {
-  count = length(aws_subnet.private)
-
-  subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
-}
+# resource "aws_route_table_association" "private" {
+#   count = length(aws_subnet.private)
+#
+#   subnet_id      = aws_subnet.private[count.index].id
+#   route_table_id = aws_route_table.private.id
+# }
 
 # ─── VPC Flow Logs → CloudWatch ───────────────────────────────────────────────
 

@@ -43,7 +43,8 @@ output "node_security_group_id" {
   value       = aws_security_group.node.id
 }
 
-output "kms_key_arn" {
-  description = "ARN of the KMS key used for secrets encryption and node EBS volumes"
-  value       = aws_kms_key.eks.arn
-}
+# output "kms_key_arn" — disabled for dev (KMS commented out)
+# output "kms_key_arn" {
+#   description = "ARN of the KMS key used for secrets encryption and node EBS volumes"
+#   value       = aws_kms_key.eks.arn
+# }

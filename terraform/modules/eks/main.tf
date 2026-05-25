@@ -17,87 +17,88 @@ data "aws_vpc" "main" {
   id = var.vpc_id
 }
 
-# ─── KMS — Secrets Encryption ─────────────────────────────────────────────────
+# ─── KMS — Secrets Encryption (disabled for dev) ─────────────────────────────
+# Uncomment for staging/prod to enable envelope encryption of secrets and EBS.
 
-resource "aws_kms_key" "eks" {
-  description             = "KMS key for ${var.cluster_name} Kubernetes secrets and node EBS volumes"
-  deletion_window_in_days = 7
-  enable_key_rotation     = true
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AllowAccountAdmin"
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:root"
-        }
-        Action   = "kms:*"
-        Resource = "*"
-      },
-      {
-        Sid    = "AllowAutoScalingServiceRole"
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
-        }
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey",
-          "kms:CreateGrant",
-        ]
-        Resource = "*"
-        Condition = {
-          Bool = { "kms:GrantIsForAWSResource" = "true" }
-        }
-      },
-      {
-        Sid    = "AllowEKSNodeRole"
-        Effect = "Allow"
-        Principal = {
-          AWS = aws_iam_role.node.arn
-        }
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey",
-          "kms:CreateGrant",
-        ]
-        Resource = "*"
-        Condition = {
-          Bool = { "kms:GrantIsForAWSResource" = "true" }
-        }
-      },
-    ]
-  })
-}
-
-resource "aws_kms_alias" "eks" {
-  name          = "alias/${var.cluster_name}-secrets"
-  target_key_id = aws_kms_key.eks.key_id
-}
-
-resource "aws_kms_grant" "autoscaling" {
-  name              = "${var.project}-${var.environment}-autoscaling-grant"
-  key_id            = aws_kms_key.eks.key_id
-  grantee_principal = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
-  operations = [
-    "Encrypt",
-    "Decrypt",
-    "ReEncryptFrom",
-    "ReEncryptTo",
-    "GenerateDataKey",
-    "GenerateDataKeyWithoutPlaintext",
-    "DescribeKey",
-    "CreateGrant",
-  ]
-}
+# resource "aws_kms_key" "eks" {
+#   description             = "KMS key for ${var.cluster_name} Kubernetes secrets and node EBS volumes"
+#   deletion_window_in_days = 7
+#   enable_key_rotation     = true
+#
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Sid    = "AllowAccountAdmin"
+#         Effect = "Allow"
+#         Principal = {
+#           AWS = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:root"
+#         }
+#         Action   = "kms:*"
+#         Resource = "*"
+#       },
+#       {
+#         Sid    = "AllowAutoScalingServiceRole"
+#         Effect = "Allow"
+#         Principal = {
+#           AWS = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+#         }
+#         Action = [
+#           "kms:Encrypt",
+#           "kms:Decrypt",
+#           "kms:ReEncrypt*",
+#           "kms:GenerateDataKey*",
+#           "kms:DescribeKey",
+#           "kms:CreateGrant",
+#         ]
+#         Resource = "*"
+#         Condition = {
+#           Bool = { "kms:GrantIsForAWSResource" = "true" }
+#         }
+#       },
+#       {
+#         Sid    = "AllowEKSNodeRole"
+#         Effect = "Allow"
+#         Principal = {
+#           AWS = aws_iam_role.node.arn
+#         }
+#         Action = [
+#           "kms:Encrypt",
+#           "kms:Decrypt",
+#           "kms:ReEncrypt*",
+#           "kms:GenerateDataKey*",
+#           "kms:DescribeKey",
+#           "kms:CreateGrant",
+#         ]
+#         Resource = "*"
+#         Condition = {
+#           Bool = { "kms:GrantIsForAWSResource" = "true" }
+#         }
+#       },
+#     ]
+#   })
+# }
+#
+# resource "aws_kms_alias" "eks" {
+#   name          = "alias/${var.cluster_name}-secrets"
+#   target_key_id = aws_kms_key.eks.key_id
+# }
+#
+# resource "aws_kms_grant" "autoscaling" {
+#   name              = "${var.project}-${var.environment}-autoscaling-grant"
+#   key_id            = aws_kms_key.eks.key_id
+#   grantee_principal = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+#   operations = [
+#     "Encrypt",
+#     "Decrypt",
+#     "ReEncryptFrom",
+#     "ReEncryptTo",
+#     "GenerateDataKey",
+#     "GenerateDataKeyWithoutPlaintext",
+#     "DescribeKey",
+#     "CreateGrant",
+#   ]
+# }
 
 # ─── CloudWatch Log Group — Control Plane ────────────────────────────────────
 
@@ -264,6 +265,8 @@ resource "aws_security_group_rule" "node_egress_dns_udp" {
 
 resource "aws_eks_cluster" "main" {
   #checkov:skip=CKV_AWS_339: EKS 1.33 is latest stable version, Checkov list not yet updated
+  #checkov:skip=CKV_AWS_39: public endpoint intentionally enabled for dev; set endpoint_public_access=false in prod
+  #checkov:skip=CKV_AWS_58: secrets encryption disabled for dev; enable KMS block for staging/prod
   name     = var.cluster_name
   version  = var.cluster_version
   role_arn = aws_iam_role.cluster.arn
@@ -272,17 +275,19 @@ resource "aws_eks_cluster" "main" {
     subnet_ids              = var.private_subnet_ids
     security_group_ids      = [aws_security_group.cluster.id]
     endpoint_private_access = true
-    endpoint_public_access  = false
+    endpoint_public_access  = var.endpoint_public_access
+    public_access_cidrs     = length(var.public_access_cidrs) > 0 ? var.public_access_cidrs : null
   }
 
   enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
-  encryption_config {
-    provider {
-      key_arn = aws_kms_key.eks.arn
-    }
-    resources = ["secrets"]
-  }
+  # encryption_config — disabled for dev; uncomment for staging/prod
+  # encryption_config {
+  #   provider {
+  #     key_arn = aws_kms_key.eks.arn
+  #   }
+  #   resources = ["secrets"]
+  # }
 
   access_config {
     authentication_mode                         = "API_AND_CONFIG_MAP"
@@ -359,10 +364,10 @@ resource "aws_launch_template" "node" {
     device_name = "/dev/xvda"
 
     ebs {
-      volume_size           = var.node_disk_size
-      volume_type           = "gp3"
-      encrypted             = true
-      kms_key_id            = aws_kms_key.eks.arn
+      volume_size = var.node_disk_size
+      volume_type = "gp3"
+      encrypted   = true # uses default aws/ebs key in dev
+      # kms_key_id          = aws_kms_key.eks.arn  # uncomment for staging/prod
       delete_on_termination = true
     }
   }

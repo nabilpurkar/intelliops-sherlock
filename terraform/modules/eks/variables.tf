@@ -69,7 +69,19 @@ variable "cluster_log_retention_days" {
 }
 
 variable "allowed_cidr_blocks" {
-  description = "CIDR blocks allowed to access EKS API server (bastion/dev instances)"
+  description = "CIDR blocks allowed to access EKS API server via the private endpoint SG rule (bastion/dev instances)"
+  type        = list(string)
+  default     = []
+}
+
+variable "endpoint_public_access" {
+  description = "Enable public endpoint for the EKS API server — set true for dev, false for prod"
+  type        = bool
+  default     = false
+}
+
+variable "public_access_cidrs" {
+  description = "CIDRs allowed to reach the public EKS endpoint — empty list means 0.0.0.0/0 (AWS default)"
   type        = list(string)
   default     = []
 }
