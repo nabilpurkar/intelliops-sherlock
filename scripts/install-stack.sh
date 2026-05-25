@@ -62,7 +62,7 @@ info "Values dir : ${VALUES}"
 # secrets into them immediately without waiting for Helm --create-namespace.
 step "Pre-creating namespaces"
 
-for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco external-dns; do
+for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco external-dns apps locust; do
   if kubectl get namespace "${ns}" &>/dev/null; then
     warn "Namespace ${ns} already exists"
   else
