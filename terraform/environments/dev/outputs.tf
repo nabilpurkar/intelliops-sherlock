@@ -54,3 +54,20 @@ output "github_actions_role_arn" {
   description = "GitHub Actions OIDC role ARN — configured in ci.yml"
   value       = module.iam.role_arn
 }
+
+# ─── Secrets ──────────────────────────────────────────────────────────────────
+
+output "postgresql_secret_arn" {
+  description = "ARN of the PostgreSQL credentials secret"
+  value       = module.secrets.postgresql_secret_arn
+}
+
+output "grafana_secret_arn" {
+  description = "ARN of the Grafana credentials secret"
+  value       = module.secrets.grafana_secret_arn
+}
+
+output "argocd_secret_arn" {
+  description = "ARN of the ArgoCD credentials secret"
+  value       = module.secrets.argocd_secret_arn
+}

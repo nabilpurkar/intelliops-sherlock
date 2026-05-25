@@ -63,6 +63,16 @@ module "iam" {
   cluster_name          = module.eks.cluster_name
 }
 
+module "secrets" {
+  source = "../../modules/secrets"
+
+  environment             = "dev"
+  project                 = "intelliops"
+  recovery_window_in_days = 7
+  # kms_key_id — omitted for dev (uses aws/secretsmanager managed key)
+  # pass module.eks.kms_key_arn here for staging/prod once KMS is enabled
+}
+
 module "eks" {
   source = "../../modules/eks"
 

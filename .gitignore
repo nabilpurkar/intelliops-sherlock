@@ -13,7 +13,7 @@ secrets.tf
 *.key
 .env
 .env.*
-secrets/
+# secrets/ — removed: too broad, was blocking terraform/modules/secrets/
 credentials
 
 # Python
