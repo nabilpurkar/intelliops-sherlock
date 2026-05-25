@@ -8,6 +8,7 @@ terraform.tfvars
 override.tf
 
 # Secrets — kabhi commit mat karna
+secrets.tf
 *.pem
 *.key
 .env
