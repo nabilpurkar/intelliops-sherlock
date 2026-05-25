@@ -74,6 +74,12 @@ variable "allowed_cidr_blocks" {
   default     = []
 }
 
+variable "allowed_ipv6_cidr_blocks" {
+  description = "IPv6 CIDR blocks allowed to reach the EKS cluster SG (port 443) and node SG (all TCP) — dev machine /128 entries"
+  type        = list(string)
+  default     = []
+}
+
 variable "endpoint_public_access" {
   description = "Enable public endpoint for the EKS API server — set true for dev, false for prod"
   type        = bool

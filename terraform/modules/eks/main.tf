@@ -166,6 +166,17 @@ resource "aws_security_group_rule" "cluster_ingress_cidr_443" {
   security_group_id = aws_security_group.cluster.id
 }
 
+resource "aws_security_group_rule" "cluster_ingress_ipv6_443" {
+  count             = length(var.allowed_ipv6_cidr_blocks) > 0 ? 1 : 0
+  description       = "HTTPS from allowed IPv6 CIDRs (dev machine - kubectl access)"
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  ipv6_cidr_blocks  = var.allowed_ipv6_cidr_blocks
+  security_group_id = aws_security_group.cluster.id
+}
+
 resource "aws_security_group_rule" "cluster_egress_kubelet" {
   description              = "API server to kubelet on nodes"
   type                     = "egress"
@@ -229,6 +240,17 @@ resource "aws_security_group_rule" "node_ingress_cluster_webhooks" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.cluster.id
   security_group_id        = aws_security_group.node.id
+}
+
+resource "aws_security_group_rule" "node_ingress_ipv6_all" {
+  count             = length(var.allowed_ipv6_cidr_blocks) > 0 ? 1 : 0
+  description       = "All TCP from allowed IPv6 CIDRs (dev machine - kubectl, NodePort, metrics)"
+  type              = "ingress"
+  from_port         = 0
+  to_port           = 65535
+  protocol          = "tcp"
+  ipv6_cidr_blocks  = var.allowed_ipv6_cidr_blocks
+  security_group_id = aws_security_group.node.id
 }
 
 resource "aws_security_group_rule" "node_egress_https" {
