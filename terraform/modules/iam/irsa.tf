@@ -21,8 +21,6 @@ locals {
 # ─── AWS Load Balancer Controller ─────────────────────────────────────────────
 
 resource "aws_iam_role" "alb_controller" {
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
-
   name = "${var.cluster_name}-alb-controller-role"
 
   assume_role_policy = jsonencode(merge(local.irsa_trust, {
@@ -46,10 +44,9 @@ resource "aws_iam_role_policy" "alb_controller" {
   #checkov:skip=CKV_AWS_287: ec2:* / elasticloadbalancing:* are AWS-prescribed permissions for the ALB controller
   #checkov:skip=CKV_AWS_289: Resource exposure permissions are required by the ALB controller to manage load balancers
   #checkov:skip=CKV_AWS_290: Write access without constraints is required — mirrors the official AWS ALB controller IAM policy
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
 
   name = "alb-controller-policy"
-  role = aws_iam_role.alb_controller[0].id
+  role = aws_iam_role.alb_controller.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -94,8 +91,6 @@ resource "aws_iam_role_policy" "alb_controller" {
 # ─── External Secrets Operator ────────────────────────────────────────────────
 
 resource "aws_iam_role" "external_secrets" {
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
-
   name = "${var.cluster_name}-external-secrets-role"
 
   assume_role_policy = jsonencode(merge(local.irsa_trust, {
@@ -117,10 +112,9 @@ resource "aws_iam_role" "external_secrets" {
 resource "aws_iam_role_policy" "external_secrets" {
   #checkov:skip=CKV_AWS_355: secretsmanager:GetSecretValue and kms:Decrypt require wildcard in dev (no per-secret scoping yet)
   #checkov:skip=CKV_AWS_290: kms:Decrypt wildcard resource is required for dev — scope to CMK ARN in prod
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
 
   name = "external-secrets-policy"
-  role = aws_iam_role.external_secrets[0].id
+  role = aws_iam_role.external_secrets.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -147,8 +141,6 @@ resource "aws_iam_role_policy" "external_secrets" {
 # ─── cert-manager ─────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "cert_manager" {
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
-
   name = "${var.cluster_name}-cert-manager-role"
 
   assume_role_policy = jsonencode(merge(local.irsa_trust, {
@@ -169,10 +161,9 @@ resource "aws_iam_role" "cert_manager" {
 
 resource "aws_iam_role_policy" "cert_manager" {
   #checkov:skip=CKV_AWS_355: Route53 zone listing requires wildcard resource — ChangeResourceRecordSets is scoped to hostedzone/*
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
 
   name = "cert-manager-route53-policy"
-  role = aws_iam_role.cert_manager[0].id
+  role = aws_iam_role.cert_manager.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -199,8 +190,6 @@ resource "aws_iam_role_policy" "cert_manager" {
 # ─── ExternalDNS ──────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "external_dns" {
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
-
   name = "${var.cluster_name}-external-dns-role"
 
   assume_role_policy = jsonencode(merge(local.irsa_trust, {
@@ -221,10 +210,9 @@ resource "aws_iam_role" "external_dns" {
 
 resource "aws_iam_role_policy" "external_dns" {
   #checkov:skip=CKV_AWS_355: Route53 zone listing requires wildcard — ChangeResourceRecordSets scoped to specific hosted zone
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
 
   name = "external-dns-route53-policy"
-  role = aws_iam_role.external_dns[0].id
+  role = aws_iam_role.external_dns.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -252,8 +240,6 @@ resource "aws_iam_role_policy" "external_dns" {
 # ─── Cluster Autoscaler ───────────────────────────────────────────────────────
 
 resource "aws_iam_role" "cluster_autoscaler" {
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
-
   name = "${var.cluster_name}-cluster-autoscaler-role"
 
   assume_role_policy = jsonencode(merge(local.irsa_trust, {
@@ -274,10 +260,9 @@ resource "aws_iam_role" "cluster_autoscaler" {
 
 resource "aws_iam_role_policy" "cluster_autoscaler" {
   #checkov:skip=CKV_AWS_355: autoscaling:Describe* requires wildcard — no resource-level scoping available
-  count = var.eks_oidc_provider_arn != "" ? 1 : 0
 
   name = "cluster-autoscaler-policy"
-  role = aws_iam_role.cluster_autoscaler[0].id
+  role = aws_iam_role.cluster_autoscaler.id
 
   policy = jsonencode({
     Version = "2012-10-17"
