@@ -20,9 +20,13 @@ module "vpc" {
 
 # ─── Dev EC2 Access — IPv6 ingress ───────────────────────────────────────────
 
+data "aws_vpc" "default" {
+  default = true
+}
+
 data "aws_security_group" "dev_ec2_default" {
   name   = "default"
-  vpc_id = "vpc-055aeedd081a8d339"
+  vpc_id = data.aws_vpc.default.id
 }
 
 resource "aws_security_group_rule" "dev_machine_ipv6_all_tcp" {
@@ -82,7 +86,7 @@ module "eks" {
   project                  = "intelliops"
   vpc_id                   = module.vpc.vpc_id
   private_subnet_ids       = module.vpc.public_subnet_ids # using public subnets in dev (no private subnets)
-  allowed_cidr_blocks      = ["172.31.0.0/16"]
+  allowed_cidr_blocks      = [data.aws_vpc.default.cidr_block]
   allowed_ipv6_cidr_blocks = ["2401:4900:8814:ee83:d925:44d:8999:db27/128"]
 
   endpoint_public_access = true
