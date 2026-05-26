@@ -1,13 +1,16 @@
 name: Deploy — Manifest Update
 
-# Triggered by service repos after a successful build+push.
+# Triggered by service repos and the aiops repo after a successful build+push.
 # Also supports manual dispatch for hotfixes / rollbacks.
 #
 # Flow:
-#   repository_dispatch (event: manifest-update, payload: {service, image_tag})
-#   → update k8s/apps/{service}.yaml image tag
-#   → ArgoCD sync → wait for Healthy+Synced
-#   → ZAP DAST baseline
+#   repository_dispatch (event: manifest-update)
+#   payload: { service, image_tag, actor, manifest_path?, argocd_app? }
+#
+#   manifest_path defaults to "k8s/apps"  (microservices)
+#   argocd_app    defaults to "microservices"
+#
+#   AIOps repo sends: manifest_path="k8s/deployments", argocd_app="aiops"
 
 on:
   repository_dispatch:
@@ -15,13 +18,21 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: "Service name (e.g. order-service)"
+        description: "Service name (e.g. order-service, anomaly-detector)"
         type: string
         required: true
       image_tag:
         description: "Image tag (git SHA)"
         type: string
         required: true
+      manifest_path:
+        description: "Manifest directory (k8s/apps or k8s/deployments)"
+        type: string
+        default: k8s/apps
+      argocd_app:
+        description: "ArgoCD Application name to sync"
+        type: string
+        default: microservices
 
 permissions:
   contents: write
@@ -31,16 +42,21 @@ jobs:
   update-manifests:
     runs-on: ubuntu-latest
     outputs:
-      service: ${{ steps.vars.outputs.service }}
-      image_tag: ${{ steps.vars.outputs.image_tag }}
+      service:       ${{ steps.vars.outputs.service }}
+      image_tag:     ${{ steps.vars.outputs.image_tag }}
+      argocd_app:    ${{ steps.vars.outputs.argocd_app }}
     steps:
       - id: vars
         run: |
           SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
           IMAGE_TAG="${{ github.event.client_payload.image_tag || github.event.inputs.image_tag }}"
-          echo "service=${SERVICE}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "Deploying ${SERVICE}:${IMAGE_TAG:0:7}"
+          MANIFEST_PATH="${{ github.event.client_payload.manifest_path || github.event.inputs.manifest_path || 'k8s/apps' }}"
+          ARGOCD_APP="${{ github.event.client_payload.argocd_app || github.event.inputs.argocd_app || 'microservices' }}"
+          echo "service=${SERVICE}"             >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}"         >> "$GITHUB_OUTPUT"
+          echo "manifest_path=${MANIFEST_PATH}" >> "$GITHUB_OUTPUT"
+          echo "argocd_app=${ARGOCD_APP}"       >> "$GITHUB_OUTPUT"
+          echo "Deploying ${SERVICE}:${IMAGE_TAG:0:7} → ${MANIFEST_PATH}/ (app: ${ARGOCD_APP})"
 
       - uses: actions/checkout@v4
         with:
@@ -49,17 +65,19 @@ jobs:
 
       - name: Update image tag in k8s manifest
         env:
-          SERVICE: ${{ steps.vars.outputs.service }}
-          IMAGE_TAG: ${{ steps.vars.outputs.image_tag }}
+          SERVICE:       ${{ steps.vars.outputs.service }}
+          IMAGE_TAG:     ${{ steps.vars.outputs.image_tag }}
+          MANIFEST_PATH: ${{ steps.vars.outputs.manifest_path }}
           REGISTRY: 007066145518.dkr.ecr.us-east-1.amazonaws.com
         run: |
-          manifest="k8s/apps/${SERVICE}.yaml"
+          manifest="${MANIFEST_PATH}/${SERVICE}.yaml"
           [ -f "${manifest}" ] || { echo "ERROR: manifest not found: ${manifest}"; exit 1; }
 
           new_image="${REGISTRY}/intelliops-dev/${SERVICE}:${IMAGE_TAG}"
           sed -i "s|image: ${REGISTRY}/intelliops-dev/${SERVICE}:.*|image: ${new_image}|" "${manifest}"
 
-          git diff --exit-code "${manifest}" && { echo "Image tag already up to date — nothing to commit"; exit 0; }
+          git diff --exit-code "${manifest}" \
+            && { echo "Image tag already up to date — nothing to commit"; exit 0; }
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -76,11 +94,11 @@ jobs:
     needs: [update-manifests]
     uses: ./.github/workflows/_argocd-sync.yml
     with:
-      app_name: microservices
+      app_name:     ${{ needs.update-manifests.outputs.argocd_app }}
       service_name: ${{ needs.update-manifests.outputs.service }}
     secrets:
       argocd_auth_token: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-      pushgateway_url: ${{ secrets.PUSHGATEWAY_URL }}
+      pushgateway_url:   ${{ secrets.PUSHGATEWAY_URL }}
     permissions:
       contents: read
 

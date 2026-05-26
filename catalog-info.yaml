@@ -125,78 +125,12 @@ spec:
 
 ---
 apiVersion: backstage.io/v1alpha1
-kind: Component
+kind: Location
 metadata:
-  name: anomaly-detector
-  description: Isolation Forest ML model — detects anomalies in service metrics and publishes to SQS
-  annotations:
-    github.com/project-slug: nabilpurkar/intelliops-sherlock
-  tags:
-    - aiops
-    - ml
-    - python
-    - scikit-learn
+  name: intelliops-aiops-catalog
+  description: AIOps components — sourced from nabilpurkar/intelliops-aiops
 spec:
-  type: service
-  lifecycle: production
-  owner: platform-team
-  system: intelliops-sherlock
-
----
-apiVersion: backstage.io/v1alpha1
-kind: Component
-metadata:
-  name: forecaster
-  description: Facebook Prophet forecasting model — predicts resource utilisation and request rates
-  annotations:
-    github.com/project-slug: nabilpurkar/intelliops-sherlock
-  tags:
-    - aiops
-    - ml
-    - python
-    - prophet
-spec:
-  type: service
-  lifecycle: production
-  owner: platform-team
-  system: intelliops-sherlock
-
----
-apiVersion: backstage.io/v1alpha1
-kind: Component
-metadata:
-  name: alert-correlator
-  description: Alert correlation engine — groups Alertmanager alerts into root-cause incidents
-  annotations:
-    github.com/project-slug: nabilpurkar/intelliops-sherlock
-  tags:
-    - aiops
-    - ml
-    - python
-spec:
-  type: service
-  lifecycle: production
-  owner: platform-team
-  system: intelliops-sherlock
-
----
-apiVersion: backstage.io/v1alpha1
-kind: Component
-metadata:
-  name: ai-agent
-  description: LangChain + Bedrock AI agent — auto-remediates anomalies via K8s actions and Slack notifications
-  annotations:
-    github.com/project-slug: nabilpurkar/intelliops-sherlock
-  tags:
-    - aiops
-    - langchain
-    - bedrock
-    - claude
-spec:
-  type: service
-  lifecycle: production
-  owner: platform-team
-  system: intelliops-sherlock
+  target: https://github.com/nabilpurkar/intelliops-aiops/blob/main/catalog-info.yaml
 
 ---
 apiVersion: backstage.io/v1alpha1

@@ -62,6 +62,7 @@ module "iam" {
     "nabilpurkar/intelliops-payment-service",
     "nabilpurkar/intelliops-inventory-service",
     "nabilpurkar/intelliops-load-generator",
+    "nabilpurkar/intelliops-aiops",
   ]
   aws_account_id       = "007066145518"
   aws_region           = "us-east-1"
