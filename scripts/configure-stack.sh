@@ -802,7 +802,7 @@ kubectl get validatingwebhookconfigurations | grep -E "kyverno|gatekeeper"
 | App | Watches | Namespace | Link |
 |-----|---------|-----------|------|
 | \`microservices\` | \`k8s/apps/\` | \`apps\` | ${ARGOCD_URL}/applications/microservices |
-| \`locust\` | \`k8s/locust/\` | \`locust\` | ${ARGOCD_URL}/applications/locust |
+| \`locust\` | \`k8s/load-generator/\` | \`locust\` | ${ARGOCD_URL}/applications/locust |
 
 Manifest files:
 \`\`\`
@@ -810,7 +810,7 @@ k8s/apps/_bootstrap.yaml          ServiceAccount + ConfigMap
 k8s/apps/order-service.yaml       Deployment + Service + HPA
 k8s/apps/payment-service.yaml     Deployment + Service + HPA
 k8s/apps/inventory-service.yaml   Deployment + Service + HPA
-k8s/locust/deployment.yaml        Deployment + Service
+k8s/load-generator/deployment.yaml Deployment + Service
 k8s/argocd/project.yaml           AppProject
 k8s/argocd/microservices-app.yaml
 k8s/argocd/locust-app.yaml

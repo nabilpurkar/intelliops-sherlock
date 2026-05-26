@@ -261,7 +261,7 @@ info "Applying ArgoCD Applications (microservices + locust) ..."
 kubectl apply -f "${REPO_ROOT}/k8s/argocd/microservices-app.yaml"
 kubectl apply -f "${REPO_ROOT}/k8s/argocd/locust-app.yaml"
 
-success "ArgoCD Applications registered — they will sync k8s/apps/ and k8s/locust/ automatically"
+success "ArgoCD Applications registered — they will sync k8s/apps/ and k8s/load-generator/ automatically"
 
 # ─── 17. falco ───────────────────────────────────────────────────────────────
 step "17/22  falco"

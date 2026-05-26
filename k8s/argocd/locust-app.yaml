@@ -13,7 +13,7 @@ spec:
   source:
     repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
     targetRevision: main
-    path: k8s/locust
+    path: k8s/load-generator
 
   destination:
     server: https://kubernetes.default.svc
