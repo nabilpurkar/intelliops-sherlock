@@ -1,6 +1,12 @@
 variable "github_repo" {
-  description = "GitHub repository in owner/repo format (e.g. nabilpurkar/intelliops-sherlock)"
+  description = "Primary GitHub repository in owner/repo format (e.g. nabilpurkar/intelliops-sherlock)"
   type        = string
+}
+
+variable "github_service_repos" {
+  description = "Additional service repositories that need OIDC access to push ECR images"
+  type        = list(string)
+  default     = []
 }
 
 variable "aws_account_id" {

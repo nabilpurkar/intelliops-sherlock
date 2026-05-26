@@ -1,0 +1,98 @@
+name: Deploy — Manifest Update
+
+# Triggered by service repos after a successful build+push.
+# Also supports manual dispatch for hotfixes / rollbacks.
+#
+# Flow:
+#   repository_dispatch (event: manifest-update, payload: {service, image_tag})
+#   → update k8s/apps/{service}.yaml image tag
+#   → ArgoCD sync → wait for Healthy+Synced
+#   → ZAP DAST baseline
+
+on:
+  repository_dispatch:
+    types: [manifest-update]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service name (e.g. order-service)"
+        type: string
+        required: true
+      image_tag:
+        description: "Image tag (git SHA)"
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+
+  update-manifests:
+    runs-on: ubuntu-latest
+    outputs:
+      service: ${{ steps.vars.outputs.service }}
+      image_tag: ${{ steps.vars.outputs.image_tag }}
+    steps:
+      - id: vars
+        run: |
+          SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
+          IMAGE_TAG="${{ github.event.client_payload.image_tag || github.event.inputs.image_tag }}"
+          echo "service=${SERVICE}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Deploying ${SERVICE}:${IMAGE_TAG:0:7}"
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+
+      - name: Update image tag in k8s manifest
+        env:
+          SERVICE: ${{ steps.vars.outputs.service }}
+          IMAGE_TAG: ${{ steps.vars.outputs.image_tag }}
+          REGISTRY: 007066145518.dkr.ecr.us-east-1.amazonaws.com
+        run: |
+          manifest="k8s/apps/${SERVICE}.yaml"
+          [ -f "${manifest}" ] || { echo "ERROR: manifest not found: ${manifest}"; exit 1; }
+
+          new_image="${REGISTRY}/intelliops-dev/${SERVICE}:${IMAGE_TAG}"
+          sed -i "s|image: ${REGISTRY}/intelliops-dev/${SERVICE}:.*|image: ${new_image}|" "${manifest}"
+
+          git diff --exit-code "${manifest}" && { echo "Image tag already up to date — nothing to commit"; exit 0; }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${manifest}"
+          git commit -m "chore(deploy): update ${SERVICE} to ${IMAGE_TAG:0:7}"
+
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push origin main && break
+            echo "Push attempt ${attempt} failed, retrying..."
+            sleep $((RANDOM % 5 + 2))
+          done
+
+  argocd-sync:
+    needs: [update-manifests]
+    uses: ./.github/workflows/_argocd-sync.yml
+    with:
+      app_name: microservices
+      service_name: ${{ needs.update-manifests.outputs.service }}
+    secrets:
+      argocd_auth_token: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+      pushgateway_url: ${{ secrets.PUSHGATEWAY_URL }}
+    permissions:
+      contents: read
+
+  dast:
+    needs: [argocd-sync]
+    uses: ./.github/workflows/_dast-scan.yml
+    with:
+      target_url: https://apps.infrastructurepath.online
+      scan_type: baseline
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      contents: read
+      security-events: write
+      issues: write

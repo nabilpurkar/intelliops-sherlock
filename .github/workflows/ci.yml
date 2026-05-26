@@ -1,23 +1,8 @@
-name: CI
+name: CI — Platform
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Pipeline sequence (each stage gates the next):
-#
-#   detect-changes
-#     → gitleaks          (secret scanning — always runs)
-#     → sast              (Semgrep SAST — always runs)
-#     → unit-tests        (pytest — runs when service files changed)
-#     → sca               (Trivy FS + OWASP Dep-Check — always runs)
-#     → sonarqube         (code quality gate — always runs)
-#     → iac-scan          (Checkov — runs when terraform files changed)
-#     → build-push        (Docker build + Trivy image + Cosign + push — main only)
-#     → update-manifests  (bump image tag in k8s/apps/{service}.yaml — main only)
-#     → argocd-sync       (trigger ArgoCD to deploy to EKS, wait for Healthy)
-#     → dast              (OWASP ZAP baseline against live app — main only)
-#
-# Runtime security (Falco → DefectDojo) and observability (Prometheus/Grafana)
-# run continuously in-cluster and are not modelled as pipeline stages here.
-# ─────────────────────────────────────────────────────────────────────────────
+# Platform repo pipeline: secret scanning + IaC security scan.
+# Service builds run in their own repos (intelliops-{order,payment,inventory,load-generator}-service)
+# and dispatch back here via repository_dispatch → _manifest-update.yml.
 
 on:
   push:
@@ -31,201 +16,38 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
   security-events: write
 
-# ── Stage 0: change detection ─────────────────────────────────────────────────
 jobs:
+
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      changed-services: ${{ steps.build-matrix.outputs.services }}
-      has-service-changes: ${{ steps.build-matrix.outputs.has-changes }}
       terraform: ${{ steps.filter.outputs.terraform }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-            order-service:
-              - 'services/order-service/**'
-            payment-service:
-              - 'services/payment-service/**'
-            inventory-service:
-              - 'services/inventory-service/**'
-            load-generator:
-              - 'services/load-generator/**'
             terraform:
               - 'terraform/**'
 
-      - id: build-matrix
-        run: |
-          services=()
-          [[ "${{ steps.filter.outputs.order-service }}"     == "true" ]] && services+=("order-service")
-          [[ "${{ steps.filter.outputs.payment-service }}"   == "true" ]] && services+=("payment-service")
-          [[ "${{ steps.filter.outputs.inventory-service }}" == "true" ]] && services+=("inventory-service")
-          [[ "${{ steps.filter.outputs.load-generator }}"    == "true" ]] && services+=("load-generator")
-
-          if [ ${#services[@]} -eq 0 ]; then
-            echo 'services=[]'      >> "$GITHUB_OUTPUT"
-            echo 'has-changes=false' >> "$GITHUB_OUTPUT"
-          else
-            json=$(printf '"%s",' "${services[@]}" | sed 's/,$//')
-            echo "services=[${json}]" >> "$GITHUB_OUTPUT"
-            echo 'has-changes=true'  >> "$GITHUB_OUTPUT"
-          fi
-
-# ── Stage 1: secret scanning ───────────────────────────────────────────────────
+  # ── Stage 1: Secret scanning (always) ────────────────────────────────────────
   gitleaks:
     needs: [detect-changes]
     uses: ./.github/workflows/_gitleaks.yml
     permissions:
       contents: read
 
-# ── Stage 2: SAST ─────────────────────────────────────────────────────────────
-  sast:
-    needs: [gitleaks]
-    uses: ./.github/workflows/_sast.yml
-    secrets:
-      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
-    permissions:
-      contents: read
-      security-events: write
-
-# ── Stage 3: unit tests ────────────────────────────────────────────────────────
-# Runs only when service source code changed. If skipped, sca still proceeds.
-  unit-tests:
-    needs: [sast]
-    if: needs.detect-changes.outputs.has-service-changes == 'true'
-    uses: ./.github/workflows/_unit-tests.yml
-    permissions:
-      contents: read
-
-# ── Stage 4: SCA (Trivy FS + OWASP Dependency-Check) ─────────────────────────
-# Runs after unit-tests. If unit-tests were skipped (no service changes) this
-# still runs. If unit-tests FAILED this is blocked (intentional gate).
-  sca:
-    needs: [unit-tests]
-    if: always() && (needs.unit-tests.result == 'success' || needs.unit-tests.result == 'skipped')
-    uses: ./.github/workflows/_sca.yml
-    secrets:
-      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
-    permissions:
-      contents: read
-      security-events: write
-
-# ── Stage 5: code quality gate ────────────────────────────────────────────────
-  sonarqube:
-    needs: [sca]
-    if: needs.sca.result == 'success'
-    uses: ./.github/workflows/_sonarqube.yml
-    secrets:
-      sonar_token: ${{ secrets.SONAR_TOKEN }}
-      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
-    permissions:
-      contents: read
-
-# ── Stage 6: IaC scan (conditional on terraform changes) ──────────────────────
-# detect-changes is in needs so terraform output is accessible here.
-# Skips cleanly when no terraform files changed.
+  # ── Stage 2: IaC scan (when terraform/ changed) ───────────────────────────────
   iac-scan:
-    needs: [detect-changes, sonarqube]
-    if: needs.sonarqube.result == 'success' && needs.detect-changes.outputs.terraform == 'true'
+    needs: [detect-changes, gitleaks]
+    if: needs.detect-changes.outputs.terraform == 'true'
     uses: ./.github/workflows/_iac-scan.yml
     secrets:
       defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+      infracost_api_key: ${{ secrets.INFRACOST_API_KEY }}
     permissions:
       contents: read
       security-events: write
-
-# ── Stage 7: Docker build → Trivy image scan → Cosign sign → push ─────────────
-# always() is required: without it GitHub auto-skips this job when iac-scan
-# is skipped (its if-condition is never evaluated). always() forces evaluation.
-  build-push:
-    needs: [detect-changes, sonarqube, iac-scan]
-    if: |
-      always() &&
-      github.ref == 'refs/heads/main' &&
-      needs.detect-changes.outputs.has-service-changes == 'true' &&
-      needs.sonarqube.result == 'success' &&
-      (needs.iac-scan.result == 'success' || needs.iac-scan.result == 'skipped')
-    strategy:
-      fail-fast: false
-      matrix:
-        service: ${{ fromJson(needs.detect-changes.outputs.changed-services) }}
-    uses: ./.github/workflows/_docker-build-push.yml
-    with:
-      service: ${{ matrix.service }}
-      aws_region: us-east-1
-      aws_account_id: "007066145518"
-      role_arn: arn:aws:iam::007066145518:role/github-actions-role
-      image_tag: ${{ github.sha }}
-    secrets:
-      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
-    permissions:
-      id-token: write
-      contents: read
-      security-events: write
-      packages: write
-
-# ── Stage 8: update k8s manifests (GitOps tag bump) ───────────────────────────
-  update-manifests:
-    needs: [detect-changes, build-push]
-    if: |
-      always() &&
-      github.ref == 'refs/heads/main' &&
-      needs.detect-changes.outputs.has-service-changes == 'true' &&
-      needs.build-push.result == 'success'
-    strategy:
-      fail-fast: false
-      matrix:
-        service: ${{ fromJson(needs.detect-changes.outputs.changed-services) }}
-    uses: ./.github/workflows/_update-manifests.yml
-    with:
-      service: ${{ matrix.service }}
-      image_tag: ${{ github.sha }}
-      aws_account_id: "007066145518"
-      aws_region: us-east-1
-    permissions:
-      contents: write
-
-# ── Stage 9: ArgoCD sync → deploy to EKS ─────────────────────────────────────
-# update-manifests pushed the new image tag to k8s/apps/{service}.yaml.
-# ArgoCD detects the git change and rolls out the new pods. With automated
-# selfHeal=true this happens within ~3 min regardless; this step triggers it
-# immediately and waits for Healthy+Synced before DAST runs.
-  argocd-sync:
-    needs: [detect-changes, update-manifests]
-    if: |
-      always() &&
-      github.ref == 'refs/heads/main' &&
-      needs.detect-changes.outputs.has-service-changes == 'true' &&
-      needs.update-manifests.result == 'success'
-    uses: ./.github/workflows/_argocd-sync.yml
-    with:
-      app_name: microservices
-    secrets:
-      argocd_auth_token: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-    permissions:
-      contents: read
-
-# ── Stage 10: DAST (after ArgoCD deploy is healthy) ──────────────────────────
-  dast:
-    needs: [detect-changes, argocd-sync]
-    if: |
-      always() &&
-      github.ref == 'refs/heads/main' &&
-      needs.detect-changes.outputs.has-service-changes == 'true' &&
-      needs.argocd-sync.result == 'success'
-    uses: ./.github/workflows/_dast-scan.yml
-    with:
-      target_url: https://apps.infrastructurepath.online
-      scan_type: baseline
-    secrets:
-      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
-    permissions:
-      contents: read
-      security-events: write
-      issues: write

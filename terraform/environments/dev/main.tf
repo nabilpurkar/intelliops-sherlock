@@ -53,7 +53,13 @@ module "ecr" {
 module "iam" {
   source = "../../modules/iam"
 
-  github_repo          = "nabilpurkar/intelliops-sherlock"
+  github_repo = "nabilpurkar/intelliops-sherlock"
+  github_service_repos = [
+    "nabilpurkar/intelliops-order-service",
+    "nabilpurkar/intelliops-payment-service",
+    "nabilpurkar/intelliops-inventory-service",
+    "nabilpurkar/intelliops-load-generator",
+  ]
   aws_account_id       = "007066145518"
   aws_region           = "us-east-1"
   ecr_repo_prefix      = "intelliops-dev"
