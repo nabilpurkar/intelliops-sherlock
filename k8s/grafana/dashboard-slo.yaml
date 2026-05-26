@@ -1,0 +1,180 @@
+---
+# SLO & Error Budget Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-slo
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "IntelliOps"
+data:
+  slo-error-budget.json: |
+    {
+      "id": null,
+      "uid": "intelliops-slo",
+      "title": "SLO & Error Budgets",
+      "tags": ["intelliops", "slo", "reliability"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "30s",
+      "time": {"from": "now-24h", "to": "now"},
+      "panels": [
+        {
+          "id": 1,
+          "type": "gauge",
+          "title": "Order Service — Error Budget Remaining (30d)",
+          "gridPos": {"x": 0, "y": 0, "w": 8, "h": 6},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0, "max": 1,
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 0.25},
+                {"color": "green", "value": 0.5}
+              ]}
+            }
+          },
+          "targets": [{"expr": "clamp_min(slo:order_service:error_budget_remaining, 0)", "instant": true, "legendFormat": ""}]
+        },
+        {
+          "id": 2,
+          "type": "gauge",
+          "title": "Payment Service — Error Budget Remaining (30d)",
+          "gridPos": {"x": 8, "y": 0, "w": 8, "h": 6},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0, "max": 1,
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 0.25},
+                {"color": "green", "value": 0.5}
+              ]}
+            }
+          },
+          "targets": [{"expr": "clamp_min(slo:payment_service:error_budget_remaining, 0)", "instant": true, "legendFormat": ""}]
+        },
+        {
+          "id": 3,
+          "type": "gauge",
+          "title": "Inventory Service — Error Budget Remaining (30d)",
+          "gridPos": {"x": 16, "y": 0, "w": 8, "h": 6},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0, "max": 1,
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 0.25},
+                {"color": "green", "value": 0.5}
+              ]}
+            }
+          },
+          "targets": [{"expr": "clamp_min(slo:inventory_service:error_budget_remaining, 0)", "instant": true, "legendFormat": ""}]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Burn Rate — order-service (1h window)",
+          "description": "Line at 1.0 = consuming budget at exactly SLO rate. >14.4 = critical.",
+          "gridPos": {"x": 0, "y": 6, "w": 24, "h": 8},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {"thresholdsStyle": {"mode": "area"}},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 3},
+                {"color": "orange", "value": 6},
+                {"color": "red", "value": 14.4}
+              ]}
+            }
+          },
+          "targets": [
+            {
+              "expr": "slo:order_service:error_rate1h / 0.001",
+              "legendFormat": "order-service burn rate"
+            },
+            {
+              "expr": "slo:payment_service:error_rate1h / 0.001",
+              "legendFormat": "payment-service burn rate"
+            },
+            {
+              "expr": "slo:inventory_service:error_rate1h / 0.001",
+              "legendFormat": "inventory-service burn rate"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Availability — order-service",
+          "gridPos": {"x": 0, "y": 14, "w": 8, "h": 8},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0.98, "max": 1,
+              "custom": {"thresholdsStyle": {"mode": "line"}},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 0.999}
+              ]}
+            }
+          },
+          "targets": [
+            {"expr": "slo:order_service:availability_rate1h", "legendFormat": "availability"},
+            {"expr": "vector(0.999)", "legendFormat": "SLO target (99.9%)"}
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Availability — payment-service",
+          "gridPos": {"x": 8, "y": 14, "w": 8, "h": 8},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0.98, "max": 1
+            }
+          },
+          "targets": [
+            {"expr": "slo:payment_service:availability_rate1h", "legendFormat": "availability"},
+            {"expr": "vector(0.999)", "legendFormat": "SLO target (99.9%)"}
+          ]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Availability — inventory-service",
+          "gridPos": {"x": 16, "y": 14, "w": 8, "h": 8},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0.98, "max": 1
+            }
+          },
+          "targets": [
+            {"expr": "slo:inventory_service:availability_rate1h", "legendFormat": "availability"},
+            {"expr": "vector(0.999)", "legendFormat": "SLO target (99.9%)"}
+          ]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "P95 Latency vs SLO targets",
+          "gridPos": {"x": 0, "y": 22, "w": 24, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "s"}},
+          "targets": [
+            {"expr": "slo:order_service:latency_p95_5m", "legendFormat": "order P95"},
+            {"expr": "slo:payment_service:latency_p95_5m", "legendFormat": "payment P95"},
+            {"expr": "slo:inventory_service:latency_p95_5m", "legendFormat": "inventory P95"},
+            {"expr": "vector(0.5)", "legendFormat": "order/payment SLO (500ms)"},
+            {"expr": "vector(0.3)", "legendFormat": "inventory SLO (300ms)"}
+          ]
+        }
+      ]
+    }

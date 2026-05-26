@@ -9,6 +9,44 @@ grafana:
   ingress:
     enabled: false
 
+  # Sidecar watches for ConfigMaps with label grafana_dashboard=1 in all namespaces
+  # and auto-provisions them into Grafana. This powers k8s/grafana/dashboard-*.yaml
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+
+  # Additional datasources — Loki for logs, Tempo for traces
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+      jsonData:
+        maxLines: 1000
+        derivedFields:
+          - datasourceUid: Tempo
+            matcherRegex: "traceId=(\\w+)"
+            name: TraceID
+            url: "$${__value.raw}"
+    - name: Tempo
+      type: tempo
+      url: http://tempo.monitoring.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+      jsonData:
+        tracesToLogs:
+          datasourceUid: Loki
+          spanStartTimeShift: "-1h"
+          spanEndTimeShift: "1h"
+          filterByTraceID: true
+
 prometheus:
   prometheusSpec:
     retention: 15d

@@ -1,0 +1,386 @@
+---
+# Application SLOs — multi-window multi-burn-rate alerts (Google SRE Book pattern)
+# SLO target: 99.9% availability, P95 latency < 500ms
+# Error budget: 0.1% → ~43.8 minutes downtime/month
+#
+# Burn rate windows:
+#   14.4x / 1h + 5m   → critical (page)
+#   6x    / 6h + 30m  → critical (page)
+#   3x    / 1d + 2h   → warning  (ticket)
+#   1x    / 3d + 6h   → warning  (informational)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: app-slo-recording-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    app: kube-prometheus-stack
+spec:
+  groups:
+    # ── Recording rules: error rates per service ─────────────────────────────
+    - name: slo.recording.order-service
+      interval: 30s
+      rules:
+        - record: slo:order_service:error_rate5m
+          expr: |
+            sum(rate(order_requests_total{status=~"5.."}[5m])) /
+            sum(rate(order_requests_total[5m]))
+
+        - record: slo:order_service:error_rate30m
+          expr: |
+            sum(rate(order_requests_total{status=~"5.."}[30m])) /
+            sum(rate(order_requests_total[30m]))
+
+        - record: slo:order_service:error_rate1h
+          expr: |
+            sum(rate(order_requests_total{status=~"5.."}[1h])) /
+            sum(rate(order_requests_total[1h]))
+
+        - record: slo:order_service:error_rate2h
+          expr: |
+            sum(rate(order_requests_total{status=~"5.."}[2h])) /
+            sum(rate(order_requests_total[2h]))
+
+        - record: slo:order_service:error_rate6h
+          expr: |
+            sum(rate(order_requests_total{status=~"5.."}[6h])) /
+            sum(rate(order_requests_total[6h]))
+
+        - record: slo:order_service:error_rate1d
+          expr: |
+            sum(rate(order_requests_total{status=~"5.."}[1d])) /
+            sum(rate(order_requests_total[1d]))
+
+        - record: slo:order_service:error_rate3d
+          expr: |
+            sum(rate(order_requests_total{status=~"5.."}[3d])) /
+            sum(rate(order_requests_total[3d]))
+
+        # Latency: fraction of requests above 500ms
+        - record: slo:order_service:latency_p95_5m
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(order_request_duration_seconds_bucket[5m])) by (le))
+
+        - record: slo:order_service:availability_rate1h
+          expr: "1 - slo:order_service:error_rate1h"
+
+        - record: slo:order_service:error_budget_remaining
+          expr: |
+            1 - (
+              sum(increase(order_requests_total{status=~"5.."}[30d])) /
+              sum(increase(order_requests_total[30d]))
+            ) / 0.001
+
+    - name: slo.recording.payment-service
+      interval: 30s
+      rules:
+        - record: slo:payment_service:error_rate5m
+          expr: |
+            sum(rate(payment_requests_total{status=~"5.."}[5m])) /
+            sum(rate(payment_requests_total[5m]))
+
+        - record: slo:payment_service:error_rate30m
+          expr: |
+            sum(rate(payment_requests_total{status=~"5.."}[30m])) /
+            sum(rate(payment_requests_total[30m]))
+
+        - record: slo:payment_service:error_rate1h
+          expr: |
+            sum(rate(payment_requests_total{status=~"5.."}[1h])) /
+            sum(rate(payment_requests_total[1h]))
+
+        - record: slo:payment_service:error_rate2h
+          expr: |
+            sum(rate(payment_requests_total{status=~"5.."}[2h])) /
+            sum(rate(payment_requests_total[2h]))
+
+        - record: slo:payment_service:error_rate6h
+          expr: |
+            sum(rate(payment_requests_total{status=~"5.."}[6h])) /
+            sum(rate(payment_requests_total[6h]))
+
+        - record: slo:payment_service:error_rate1d
+          expr: |
+            sum(rate(payment_requests_total{status=~"5.."}[1d])) /
+            sum(rate(payment_requests_total[1d]))
+
+        - record: slo:payment_service:error_rate3d
+          expr: |
+            sum(rate(payment_requests_total{status=~"5.."}[3d])) /
+            sum(rate(payment_requests_total[3d]))
+
+        - record: slo:payment_service:latency_p95_5m
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(payment_request_duration_seconds_bucket[5m])) by (le))
+
+        - record: slo:payment_service:availability_rate1h
+          expr: "1 - slo:payment_service:error_rate1h"
+
+        - record: slo:payment_service:error_budget_remaining
+          expr: |
+            1 - (
+              sum(increase(payment_requests_total{status=~"5.."}[30d])) /
+              sum(increase(payment_requests_total[30d]))
+            ) / 0.001
+
+    - name: slo.recording.inventory-service
+      interval: 30s
+      rules:
+        - record: slo:inventory_service:error_rate5m
+          expr: |
+            sum(rate(inventory_requests_total{status=~"5.."}[5m])) /
+            sum(rate(inventory_requests_total[5m]))
+
+        - record: slo:inventory_service:error_rate30m
+          expr: |
+            sum(rate(inventory_requests_total{status=~"5.."}[30m])) /
+            sum(rate(inventory_requests_total[30m]))
+
+        - record: slo:inventory_service:error_rate1h
+          expr: |
+            sum(rate(inventory_requests_total{status=~"5.."}[1h])) /
+            sum(rate(inventory_requests_total[1h]))
+
+        - record: slo:inventory_service:error_rate2h
+          expr: |
+            sum(rate(inventory_requests_total{status=~"5.."}[2h])) /
+            sum(rate(inventory_requests_total[2h]))
+
+        - record: slo:inventory_service:error_rate6h
+          expr: |
+            sum(rate(inventory_requests_total{status=~"5.."}[6h])) /
+            sum(rate(inventory_requests_total[6h]))
+
+        - record: slo:inventory_service:error_rate1d
+          expr: |
+            sum(rate(inventory_requests_total{status=~"5.."}[1d])) /
+            sum(rate(inventory_requests_total[1d]))
+
+        - record: slo:inventory_service:error_rate3d
+          expr: |
+            sum(rate(inventory_requests_total{status=~"5.."}[3d])) /
+            sum(rate(inventory_requests_total[3d]))
+
+        - record: slo:inventory_service:latency_p95_5m
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(inventory_request_duration_seconds_bucket[5m])) by (le))
+
+        - record: slo:inventory_service:availability_rate1h
+          expr: "1 - slo:inventory_service:error_rate1h"
+
+        - record: slo:inventory_service:error_budget_remaining
+          expr: |
+            1 - (
+              sum(increase(inventory_requests_total{status=~"5.."}[30d])) /
+              sum(increase(inventory_requests_total[30d]))
+            ) / 0.001
+
+---
+# ── SLO Alerting rules ───────────────────────────────────────────────────────
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: app-slo-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    app: kube-prometheus-stack
+spec:
+  groups:
+    # ── Order Service SLO alerts ─────────────────────────────────────────────
+    - name: slo.alerts.order-service
+      rules:
+        # 14.4x burn — fast burn, critical
+        - alert: OrderServiceErrorBudgetBurnCriticalFast
+          expr: |
+            slo:order_service:error_rate5m  > (14.4 * 0.001) and
+            slo:order_service:error_rate1h  > (14.4 * 0.001)
+          for: 2m
+          labels:
+            severity: critical
+            service: order-service
+            slo: availability
+          annotations:
+            summary: "Order service burning error budget at 14.4x rate"
+            description: "High error rate {{ $value | humanizePercentage }} over 5m+1h windows. At this rate the monthly error budget will be exhausted in ~2 hours."
+            runbook: "https://github.com/nabilpurkar/intelliops-sherlock/blob/main/docs/runbooks/order-service.md"
+
+        # 6x burn — sustained burn, critical
+        - alert: OrderServiceErrorBudgetBurnCriticalSlow
+          expr: |
+            slo:order_service:error_rate30m > (6 * 0.001) and
+            slo:order_service:error_rate6h  > (6 * 0.001)
+          for: 15m
+          labels:
+            severity: critical
+            service: order-service
+            slo: availability
+          annotations:
+            summary: "Order service burning error budget at 6x rate"
+            description: "Sustained error rate {{ $value | humanizePercentage }} over 30m+6h windows."
+
+        # 3x burn — warning
+        - alert: OrderServiceErrorBudgetBurnWarning
+          expr: |
+            slo:order_service:error_rate2h > (3 * 0.001) and
+            slo:order_service:error_rate1d > (3 * 0.001)
+          for: 1h
+          labels:
+            severity: warning
+            service: order-service
+            slo: availability
+          annotations:
+            summary: "Order service error budget burn rate elevated"
+            description: "Error rate {{ $value | humanizePercentage }} over 2h+1d windows at 3x burn rate."
+
+        # Budget exhausted warning
+        - alert: OrderServiceErrorBudgetLow
+          expr: slo:order_service:error_budget_remaining < 0.25
+          labels:
+            severity: warning
+            service: order-service
+            slo: availability
+          annotations:
+            summary: "Order service error budget below 25%"
+            description: "Only {{ $value | humanizePercentage }} of monthly error budget remaining."
+
+        # Latency SLO violation
+        - alert: OrderServiceLatencySLOViolation
+          expr: slo:order_service:latency_p95_5m > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            service: order-service
+            slo: latency
+          annotations:
+            summary: "Order service P95 latency exceeds 500ms SLO"
+            description: "P95 latency is {{ $value }}s, exceeding the 500ms target."
+
+    # ── Payment Service SLO alerts ───────────────────────────────────────────
+    - name: slo.alerts.payment-service
+      rules:
+        - alert: PaymentServiceErrorBudgetBurnCriticalFast
+          expr: |
+            slo:payment_service:error_rate5m  > (14.4 * 0.001) and
+            slo:payment_service:error_rate1h  > (14.4 * 0.001)
+          for: 2m
+          labels:
+            severity: critical
+            service: payment-service
+            slo: availability
+          annotations:
+            summary: "Payment service burning error budget at 14.4x rate"
+            description: "High error rate {{ $value | humanizePercentage }} over 5m+1h windows."
+
+        - alert: PaymentServiceErrorBudgetBurnCriticalSlow
+          expr: |
+            slo:payment_service:error_rate30m > (6 * 0.001) and
+            slo:payment_service:error_rate6h  > (6 * 0.001)
+          for: 15m
+          labels:
+            severity: critical
+            service: payment-service
+            slo: availability
+          annotations:
+            summary: "Payment service burning error budget at 6x rate"
+            description: "Sustained error rate {{ $value | humanizePercentage }} over 30m+6h windows."
+
+        - alert: PaymentServiceErrorBudgetBurnWarning
+          expr: |
+            slo:payment_service:error_rate2h > (3 * 0.001) and
+            slo:payment_service:error_rate1d > (3 * 0.001)
+          for: 1h
+          labels:
+            severity: warning
+            service: payment-service
+            slo: availability
+          annotations:
+            summary: "Payment service error budget burn rate elevated"
+            description: "Error rate {{ $value | humanizePercentage }} at 3x burn rate."
+
+        - alert: PaymentServiceErrorBudgetLow
+          expr: slo:payment_service:error_budget_remaining < 0.25
+          labels:
+            severity: warning
+            service: payment-service
+            slo: availability
+          annotations:
+            summary: "Payment service error budget below 25%"
+            description: "Only {{ $value | humanizePercentage }} of monthly error budget remaining."
+
+        - alert: PaymentServiceLatencySLOViolation
+          expr: slo:payment_service:latency_p95_5m > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            service: payment-service
+            slo: latency
+          annotations:
+            summary: "Payment service P95 latency exceeds 500ms SLO"
+            description: "P95 latency is {{ $value }}s, exceeding the 500ms target."
+
+    # ── Inventory Service SLO alerts ─────────────────────────────────────────
+    - name: slo.alerts.inventory-service
+      rules:
+        - alert: InventoryServiceErrorBudgetBurnCriticalFast
+          expr: |
+            slo:inventory_service:error_rate5m  > (14.4 * 0.001) and
+            slo:inventory_service:error_rate1h  > (14.4 * 0.001)
+          for: 2m
+          labels:
+            severity: critical
+            service: inventory-service
+            slo: availability
+          annotations:
+            summary: "Inventory service burning error budget at 14.4x rate"
+            description: "High error rate {{ $value | humanizePercentage }} over 5m+1h windows."
+
+        - alert: InventoryServiceErrorBudgetBurnCriticalSlow
+          expr: |
+            slo:inventory_service:error_rate30m > (6 * 0.001) and
+            slo:inventory_service:error_rate6h  > (6 * 0.001)
+          for: 15m
+          labels:
+            severity: critical
+            service: inventory-service
+            slo: availability
+          annotations:
+            summary: "Inventory service burning error budget at 6x rate"
+            description: "Sustained error rate {{ $value | humanizePercentage }} over 30m+6h windows."
+
+        - alert: InventoryServiceErrorBudgetBurnWarning
+          expr: |
+            slo:inventory_service:error_rate2h > (3 * 0.001) and
+            slo:inventory_service:error_rate1d > (3 * 0.001)
+          for: 1h
+          labels:
+            severity: warning
+            service: inventory-service
+            slo: availability
+          annotations:
+            summary: "Inventory service error budget burn rate elevated"
+
+        - alert: InventoryServiceErrorBudgetLow
+          expr: slo:inventory_service:error_budget_remaining < 0.25
+          labels:
+            severity: warning
+            service: inventory-service
+            slo: availability
+          annotations:
+            summary: "Inventory service error budget below 25%"
+            description: "Only {{ $value | humanizePercentage }} of monthly error budget remaining."
+
+        - alert: InventoryServiceLatencySLOViolation
+          expr: slo:inventory_service:latency_p95_5m > 0.3
+          for: 5m
+          labels:
+            severity: warning
+            service: inventory-service
+            slo: latency
+          annotations:
+            summary: "Inventory service P95 latency exceeds 300ms SLO"
+            description: "P95 latency is {{ $value }}s, exceeding the 300ms target."

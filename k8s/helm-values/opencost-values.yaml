@@ -1,0 +1,44 @@
+# chart: opencost/opencost
+# repo:  https://opencost.github.io/opencost-helm-chart
+# install: helm upgrade --install opencost opencost/opencost -n monitoring -f opencost-values.yaml
+
+opencost:
+  exporter:
+    defaultClusterId: intelliops-dev
+    # Connect to the kube-prometheus-stack Prometheus
+    prometheus:
+      internal:
+        enabled: false
+      external:
+        enabled: true
+        url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+    resources:
+      requests:
+        cpu: 10m
+        memory: 55Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+
+  ui:
+    enabled: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 55Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+    ingress:
+      enabled: false
+
+  metrics:
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: kube-prometheus-stack
+
+  # Grafana dashboard auto-provisioned via ConfigMap (grafana_dashboard=1)
+  grafana:
+    dashboardsConfigMaps:
+      enabled: false  # we provision via k8s/grafana/dashboard-cost.yaml instead

@@ -1,0 +1,24 @@
+# chart: prometheus-community/prometheus-pushgateway
+# repo:  https://prometheus-community.github.io/helm-charts
+# install: helm upgrade --install prometheus-pushgateway prometheus-community/prometheus-pushgateway -n monitoring -f pushgateway-values.yaml
+# purpose: Receives DORA metrics pushed from CI pipeline after each deployment
+
+replicaCount: 1
+
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  additionalLabels:
+    release: kube-prometheus-stack
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 50m
+    memory: 64Mi
+
+# Persist metrics across pod restarts
+persistentVolume:
+  enabled: false  # stateless is fine for DORA — CI re-pushes on next deploy

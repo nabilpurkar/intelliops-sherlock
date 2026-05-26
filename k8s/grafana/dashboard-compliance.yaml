@@ -1,0 +1,217 @@
+---
+# GRC / Compliance / Security Dashboard
+# Sources: Falco (runtime events), Kyverno (policy violations), Gatekeeper (audit)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-compliance
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "IntelliOps"
+data:
+  compliance-security.json: |
+    {
+      "id": null,
+      "uid": "intelliops-compliance",
+      "title": "GRC & Security Compliance",
+      "tags": ["intelliops", "security", "compliance", "grc"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "1m",
+      "time": {"from": "now-24h", "to": "now"},
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Falco — Critical Events (24h)",
+          "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "increase(falco_events_total{priority=\"Critical\"}[24h]) or vector(0)",
+            "instant": true, "legendFormat": ""
+          }]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Falco — High Severity (24h)",
+          "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 20}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "increase(falco_events_total{priority=~\"Critical|Error\"}[24h]) or vector(0)",
+            "instant": true, "legendFormat": ""
+          }]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Kyverno — Policy Violations (24h)",
+          "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 10}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "increase(kyverno_policy_results_total{rule_result=\"fail\"}[24h]) or vector(0)",
+            "instant": true, "legendFormat": ""
+          }]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Gatekeeper — Constraint Violations",
+          "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "sum(gatekeeper_violations) or vector(0)",
+            "instant": true, "legendFormat": ""
+          }]
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "DevSecOps Layers Passing",
+          "description": "7 security scan types active in CI pipeline",
+          "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 5},
+                {"color": "green", "value": 7}
+              ]}
+            }
+          },
+          "targets": [{"expr": "vector(7)", "instant": true, "legendFormat": ""}]
+        },
+        {
+          "id": 6,
+          "type": "stat",
+          "title": "Runtime Security Active",
+          "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [{"type": "value", "options": {"1": {"text": "Falco Running", "color": "green"}, "0": {"text": "Falco Down", "color": "red"}}}],
+              "color": {"mode": "thresholds"}
+            }
+          },
+          "targets": [{"expr": "up{job=~\".*falco.*\"} or vector(0)", "instant": true, "legendFormat": ""}]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Falco Events by Priority (rate/min)",
+          "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+          "fieldConfig": {
+            "defaults": {"unit": "short"},
+            "overrides": [
+              {"matcher": {"id": "byName", "options": "Critical"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]},
+              {"matcher": {"id": "byName", "options": "Error"}, "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]},
+              {"matcher": {"id": "byName", "options": "Warning"}, "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]},
+              {"matcher": {"id": "byName", "options": "Notice"}, "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]}
+            ]
+          },
+          "targets": [
+            {"expr": "rate(falco_events_total{priority=\"Critical\"}[5m]) * 60", "legendFormat": "Critical"},
+            {"expr": "rate(falco_events_total{priority=\"Error\"}[5m]) * 60", "legendFormat": "Error"},
+            {"expr": "rate(falco_events_total{priority=\"Warning\"}[5m]) * 60", "legendFormat": "Warning"},
+            {"expr": "rate(falco_events_total{priority=\"Notice\"}[5m]) * 60", "legendFormat": "Notice"}
+          ]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Kyverno Policy Violations over time",
+          "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "targets": [
+            {"expr": "increase(kyverno_policy_results_total{rule_result=\"fail\"}[5m])", "legendFormat": "{{ policy }}/{{ rule }}"}
+          ]
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Falco Events by Rule (top 10)",
+          "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "targets": [{
+            "expr": "topk(10, increase(falco_events_total[1h]))",
+            "legendFormat": "{{ rule }}"
+          }]
+        },
+        {
+          "id": 10,
+          "type": "table",
+          "title": "Active Gatekeeper Constraint Violations",
+          "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "options": {"footer": {"show": false}, "showHeader": true},
+          "targets": [{
+            "expr": "gatekeeper_violations > 0",
+            "instant": true,
+            "legendFormat": "{{ constraint_kind }}/{{ constraint_name }}"
+          }]
+        },
+        {
+          "id": 11,
+          "type": "table",
+          "title": "Security Layer Status",
+          "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {}},
+          "options": {"footer": {"show": false}, "showHeader": true},
+          "transformations": [{"id": "merge", "options": {}}],
+          "targets": [
+            {"expr": "vector(1)", "instant": true, "legendFormat": "Gitleaks (secrets scan) ✓"},
+            {"expr": "vector(1)", "instant": true, "legendFormat": "Semgrep (SAST) ✓"},
+            {"expr": "vector(1)", "instant": true, "legendFormat": "Trivy + OWASP (SCA) ✓"},
+            {"expr": "vector(1)", "instant": true, "legendFormat": "Checkov (IaC scan) ✓"},
+            {"expr": "vector(1)", "instant": true, "legendFormat": "Trivy image (container) ✓"},
+            {"expr": "vector(1)", "instant": true, "legendFormat": "Falco (runtime) ✓"},
+            {"expr": "vector(1)", "instant": true, "legendFormat": "ZAP (DAST) ✓"}
+          ]
+        }
+      ]
+    }

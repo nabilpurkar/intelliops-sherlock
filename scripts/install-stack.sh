@@ -314,10 +314,39 @@ kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-constraint.yaml
 kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-constraint.yaml"
 success "Gatekeeper constraints applied"
 
-# ─── 22. (placeholder for future tools) ──────────────────────────────────────
-step "22/22  Security coverage complete"
-info "Tools installed: Kyverno, OPA Gatekeeper, Falco, SonarQube, DefectDojo"
-info "CI pipeline covers: Semgrep, Trivy, Checkov, Gitleaks, OWASP Dep-Check, Cosign, ZAP"
+# ─── 22. Prometheus Pushgateway (DORA metrics receiver) ──────────────────────
+step "22/25  prometheus-pushgateway (DORA metrics)"
+helm_install prometheus-pushgateway monitoring \
+  prometheus-community/prometheus-pushgateway \
+  -f "${VALUES}/pushgateway-values.yaml"
+success "Pushgateway installed — CI will push DORA metrics here after each deployment"
+info "Add secret PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091 to GitHub"
+
+# ─── 23. OpenCost (Kubernetes cost monitoring) ────────────────────────────────
+step "23/25  opencost (FinOps)"
+helm repo add opencost https://opencost.github.io/opencost-helm-chart 2>/dev/null || true
+helm repo update opencost 2>/dev/null || true
+helm_install opencost monitoring \
+  opencost/opencost \
+  -f "${VALUES}/opencost-values.yaml"
+success "OpenCost installed — cost metrics available in Grafana cost dashboard"
+
+# ─── 24. Application SLOs + Error Budget rules ────────────────────────────────
+step "24/25  SLO recording rules + alerts"
+kubectl apply -f "${REPO_ROOT}/k8s/slos/"
+success "PrometheusRule SLOs applied (order/payment/inventory — 99.9% availability SLO)"
+
+# ─── 25. Grafana dashboards provisioning ──────────────────────────────────────
+step "25/25  Grafana dashboards"
+kubectl apply -f "${REPO_ROOT}/k8s/grafana/"
+success "Grafana dashboard ConfigMaps applied — sidecar will provision them automatically"
+info "Dashboards: Services Overview, SLO/Error Budget, DORA Metrics, Security/GRC, Cost"
+
+step "Security coverage complete"
+info "Security tools: Kyverno, OPA Gatekeeper, Falco, SonarQube, DefectDojo"
+info "CI pipeline:    Semgrep, Trivy, Checkov, Gitleaks, OWASP Dep-Check, Cosign, ZAP, Infracost"
+info "Observability:  Prometheus, Grafana, Loki, Tempo, OTEL, OpenCost, Pushgateway"
+info "SLOs:           99.9% availability + P95 latency for order/payment/inventory services"
 
 # ─── Verify ───────────────────────────────────────────────────────────────────
 step "Verification"

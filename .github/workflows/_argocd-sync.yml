@@ -12,8 +12,15 @@ on:
         type: string
         required: false
         default: https://argocd.infrastructurepath.online
+      service_name:
+        description: Service name for DORA metrics labelling (e.g. order-service)
+        type: string
+        required: false
+        default: ""
     secrets:
       argocd_auth_token:
+        required: false
+      pushgateway_url:
         required: false
 
 permissions:
@@ -68,3 +75,37 @@ jobs:
           echo "Timed out waiting for ${APP} to become Healthy+Synced"
           echo "Check ArgoCD UI: ${ARGOCD_URL}/applications/${APP}"
           exit 1
+
+      - name: Push DORA metrics to Pushgateway
+        if: always()
+        env:
+          PUSHGATEWAY_URL: ${{ secrets.pushgateway_url }}
+          SERVICE: ${{ inputs.service_name }}
+          APP: ${{ inputs.app_name }}
+          DEPLOY_STATUS: ${{ job.status }}
+        run: |
+          [ -z "${PUSHGATEWAY_URL}" ] && exit 0
+
+          NOW=$(date +%s)
+          # Lead time = now minus the timestamp of the triggering commit
+          COMMIT_TIME=$(git -C . log -1 --format="%ct" "${{ github.sha }}" 2>/dev/null || echo "${NOW}")
+          LEAD_TIME=$((NOW - COMMIT_TIME))
+
+          STATUS_VALUE=1
+          [ "${DEPLOY_STATUS}" != "success" ] && STATUS_VALUE=0
+
+          LABEL_SERVICE="${SERVICE:-${APP}}"
+
+          curl -sf --data-binary @- \
+            "${PUSHGATEWAY_URL}/metrics/job/dora/service/${LABEL_SERVICE}/environment/production" <<EOF || true
+          # HELP dora_deployment_timestamp_seconds Unix timestamp of the most recent deployment
+          # TYPE dora_deployment_timestamp_seconds gauge
+          dora_deployment_timestamp_seconds{service="${LABEL_SERVICE}",environment="production",status="${DEPLOY_STATUS}"} ${NOW}
+          # HELP dora_deployment_lead_time_seconds Seconds from git commit to production deployment
+          # TYPE dora_deployment_lead_time_seconds gauge
+          dora_deployment_lead_time_seconds{service="${LABEL_SERVICE}",environment="production"} ${LEAD_TIME}
+          # HELP dora_deployment_status Whether the most recent deployment succeeded (1) or failed (0)
+          # TYPE dora_deployment_status gauge
+          dora_deployment_status{service="${LABEL_SERVICE}",environment="production",status="${DEPLOY_STATUS}"} ${STATUS_VALUE}
+          EOF
+          echo "DORA metrics pushed: lead_time=${LEAD_TIME}s status=${DEPLOY_STATUS}"

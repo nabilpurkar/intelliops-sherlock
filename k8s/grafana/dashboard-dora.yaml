@@ -1,0 +1,190 @@
+---
+# DORA Metrics Dashboard
+# Metrics source: Prometheus Pushgateway (pushed by CI after each deployment)
+# Metric names: dora_deployment_timestamp_seconds, dora_deployment_lead_time_seconds,
+#               dora_deployment_status (1=success, 0=failed)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-dora
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "IntelliOps"
+data:
+  dora-metrics.json: |
+    {
+      "id": null,
+      "uid": "intelliops-dora",
+      "title": "DORA Metrics",
+      "tags": ["intelliops", "dora", "devops"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "5m",
+      "time": {"from": "now-30d", "to": "now"},
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Deployment Frequency (last 7d)",
+          "description": "Number of successful deployments in the last 7 days. Elite: >1/day",
+          "gridPos": {"x": 0, "y": 0, "w": 6, "h": 6},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "green", "value": 7}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "count_over_time(dora_deployment_status{status=\"success\"}[7d]) or vector(0)",
+            "instant": true,
+            "legendFormat": ""
+          }]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Lead Time — avg (last 7d)",
+          "description": "Time from git commit to production. Elite: <1 hour",
+          "gridPos": {"x": 6, "y": 0, "w": 6, "h": 6},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 86400},
+                {"color": "green", "value": 3600}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "avg_over_time(dora_deployment_lead_time_seconds[7d]) or vector(0)",
+            "instant": true,
+            "legendFormat": ""
+          }]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Change Failure Rate (last 30d)",
+          "description": "% of deployments causing incidents. Elite: <5%",
+          "gridPos": {"x": 12, "y": 0, "w": 6, "h": 6},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 0.05},
+                {"color": "red", "value": 0.15}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "(\n  increase(argocd_app_sync_total{phase=~\"Failed|Error\"}[30d]) /\n  increase(argocd_app_sync_total[30d])\n) or vector(0)",
+            "instant": true,
+            "legendFormat": ""
+          }]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "ArgoCD Sync Success Rate (30d)",
+          "description": "Percentage of ArgoCD syncs that succeeded",
+          "gridPos": {"x": 18, "y": 0, "w": 6, "h": 6},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 0.9},
+                {"color": "green", "value": 0.99}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "(\n  increase(argocd_app_sync_total{phase=\"Succeeded\"}[30d]) /\n  increase(argocd_app_sync_total[30d])\n) or vector(0)",
+            "instant": true,
+            "legendFormat": ""
+          }]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Deployments over time (per service)",
+          "gridPos": {"x": 0, "y": 6, "w": 24, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "bars", "barAlignment": 0}}},
+          "targets": [
+            {
+              "expr": "increase(argocd_app_sync_total{phase=\"Succeeded\", name=\"microservices\"}[1d])",
+              "legendFormat": "microservices deploys/day"
+            },
+            {
+              "expr": "increase(argocd_app_sync_total{phase=\"Succeeded\", name=\"locust\"}[1d])",
+              "legendFormat": "load-generator deploys/day"
+            },
+            {
+              "expr": "increase(argocd_app_sync_total{phase=~\"Failed|Error\"}[1d])",
+              "legendFormat": "failed syncs/day"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Lead Time trend (per deployment)",
+          "description": "Each point = one deployment's commit-to-prod time",
+          "gridPos": {"x": 0, "y": 14, "w": 12, "h": 8},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {"thresholdsStyle": {"mode": "line"}},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 3600},
+                {"color": "red", "value": 86400}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "dora_deployment_lead_time_seconds",
+            "legendFormat": "{{ service }}"
+          }]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "ArgoCD Application Health",
+          "gridPos": {"x": 12, "y": 14, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "short", "mappings": [
+            {"type": "value", "options": {"0": {"text": "Degraded", "color": "red"}, "1": {"text": "Healthy", "color": "green"}}}
+          ]}},
+          "targets": [{
+            "expr": "argocd_app_info{health_status=\"Healthy\"}",
+            "legendFormat": "{{ name }}"
+          }]
+        },
+        {
+          "id": 8,
+          "type": "table",
+          "title": "DORA Performance Levels — Reference",
+          "gridPos": {"x": 0, "y": 22, "w": 24, "h": 6},
+          "options": {"footer": {"show": false}, "showHeader": true},
+          "transformations": [{"id": "merge", "options": {}}],
+          "targets": [{
+            "expr": "vector(1)",
+            "instant": true,
+            "legendFormat": "Elite: >1/day | <1h lead time | <5% CFR | <1h MTTR"
+          }]
+        }
+      ]
+    }

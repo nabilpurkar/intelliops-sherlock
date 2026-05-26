@@ -1,9 +1,11 @@
-name: IaC Scan - Checkov
+name: IaC Scan - Checkov + Infracost
 
 on:
   workflow_call:
     secrets:
       defectdojo_api_key:
+        required: false
+      infracost_api_key:
         required: false
 
 env:
@@ -49,3 +51,34 @@ jobs:
             -F "active=true" \
             -F "verified=false" \
             -F "branch_tag=${{ github.sha }}" || true
+
+      - name: Infracost estimate (non-blocking)
+        continue-on-error: true
+        env:
+          INFRACOST_API_KEY: ${{ secrets.infracost_api_key }}
+        run: |
+          [ -z "${INFRACOST_API_KEY}" ] && echo "INFRACOST_API_KEY not set — skipping cost estimate" && exit 0
+
+          curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+          infracost configure set api_key "${INFRACOST_API_KEY}"
+
+          infracost breakdown \
+            --path terraform/environments/dev \
+            --format json \
+            --out-file infracost.json
+
+          infracost output \
+            --path infracost.json \
+            --format github-comment \
+            --out-file infracost-comment.md
+
+          echo "### Infracost Estimate" >> "${GITHUB_STEP_SUMMARY}"
+          cat infracost-comment.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Infracost report
+        if: always() && hashFiles('infracost.json') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: infracost-report
+          path: infracost.json

@@ -1,0 +1,148 @@
+---
+# Cost Dashboard — powered by OpenCost
+# OpenCost exposes metrics via Prometheus: opencost_* namespace
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-cost
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "IntelliOps"
+data:
+  cost-allocation.json: |
+    {
+      "id": null,
+      "uid": "intelliops-cost",
+      "title": "Cost & Resource Allocation",
+      "tags": ["intelliops", "cost", "finops", "opencost"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "5m",
+      "time": {"from": "now-7d", "to": "now"},
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Cluster Total Cost (today)",
+          "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 10},
+                {"color": "red", "value": 50}
+              ]}
+            }
+          },
+          "targets": [{
+            "expr": "sum(node_total_hourly_cost) * 24 or vector(0)",
+            "instant": true,
+            "legendFormat": ""
+          }]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "CPU Cost (today)",
+          "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+          "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+          "targets": [{
+            "expr": "sum(container_cpu_allocation * on(node) group_left() node_cpu_hourly_cost) * 24 or vector(0)",
+            "instant": true,
+            "legendFormat": ""
+          }]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Memory Cost (today)",
+          "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+          "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+          "targets": [{
+            "expr": "sum(container_memory_allocation_bytes * on(node) group_left() node_ram_hourly_cost / 1024 / 1024 / 1024) * 24 or vector(0)",
+            "instant": true,
+            "legendFormat": ""
+          }]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Monthly Projected Cost",
+          "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+          "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+          "targets": [{
+            "expr": "sum(node_total_hourly_cost) * 24 * 30 or vector(0)",
+            "instant": true,
+            "legendFormat": ""
+          }]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Cost by Namespace ($/day)",
+          "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+          "targets": [{
+            "expr": "sum by (namespace) (\n  label_replace(\n    container_cpu_allocation * on(node) group_left() node_cpu_hourly_cost +\n    container_memory_allocation_bytes * on(node) group_left() node_ram_hourly_cost / 1024 / 1024 / 1024,\n    \"namespace\", \"$1\", \"namespace\", \"(.*)\"\n  )\n) * 24",
+            "legendFormat": "{{ namespace }}"
+          }]
+        },
+        {
+          "id": 6,
+          "type": "piechart",
+          "title": "Cost Distribution by Namespace",
+          "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+          "targets": [{
+            "expr": "sum by (namespace) (\n  container_cpu_allocation * on(node) group_left() node_cpu_hourly_cost\n)",
+            "instant": true,
+            "legendFormat": "{{ namespace }}"
+          }]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "CPU Allocation by Pod (apps namespace)",
+          "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "short", "custom": {"stacking": {"mode": "normal"}}}},
+          "targets": [{
+            "expr": "sum by (pod) (container_cpu_allocation{namespace=\"apps\"})",
+            "legendFormat": "{{ pod }}"
+          }]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Memory Allocation by Pod (apps namespace)",
+          "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"stacking": {"mode": "normal"}}}},
+          "targets": [{
+            "expr": "sum by (pod) (container_memory_allocation_bytes{namespace=\"apps\"})",
+            "legendFormat": "{{ pod }}"
+          }]
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Efficiency — CPU requested vs actual usage",
+          "description": "Gap between requested and used = waste",
+          "gridPos": {"x": 0, "y": 20, "w": 24, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "targets": [
+            {
+              "expr": "sum by (namespace) (kube_pod_container_resource_requests{resource=\"cpu\"})",
+              "legendFormat": "{{ namespace }} — requested"
+            },
+            {
+              "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total[5m]))",
+              "legendFormat": "{{ namespace }} — used"
+            }
+          ]
+        }
+      ]
+    }
