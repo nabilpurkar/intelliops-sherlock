@@ -12,6 +12,8 @@ INSTRUCTIONS.md
 
 # Secrets — kabhi commit mat karna
 secrets.tf
+# Exception: terraform module secrets.tf files define resource structure (no actual values)
+!terraform/modules/**/secrets.tf
 *.pem
 *.key
 .env

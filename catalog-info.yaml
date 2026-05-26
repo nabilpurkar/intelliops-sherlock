@@ -1,0 +1,265 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: intelliops-sherlock
+  description: AIOps + DevSecOps demo platform — EKS-based microservices with full observability, security, and AI-driven auto-remediation
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-sherlock
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - aiops
+    - devsecops
+    - kubernetes
+    - platform
+spec:
+  owner: platform-team
+  domain: intelliops
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: intelliops
+  description: IntelliOps platform domain
+spec:
+  owner: platform-team
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: order-service
+  description: Order management microservice — handles order lifecycle with circuit breaker and memory leak simulation
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-order-service
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8000"
+  tags:
+    - python
+    - fastapi
+    - microservice
+  links:
+    - url: https://apps.infrastructurepath.online/orders
+      title: Live Service
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+  providesApis:
+    - order-api
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: payment-service
+  description: Payment processing microservice — simulates payment flows with configurable failure rate
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-payment-service
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8002"
+  tags:
+    - python
+    - fastapi
+    - microservice
+  links:
+    - url: https://apps.infrastructurepath.online/payments
+      title: Live Service
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+  providesApis:
+    - payment-api
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: inventory-service
+  description: Inventory management microservice — tracks stock levels with low-stock alerting
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-inventory-service
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8001"
+  tags:
+    - python
+    - fastapi
+    - microservice
+  links:
+    - url: https://apps.infrastructurepath.online/inventory
+      title: Live Service
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+  providesApis:
+    - inventory-api
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: load-generator
+  description: Locust-based load generator — drives realistic traffic against all microservices
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-load-generator
+  tags:
+    - testing
+    - locust
+  links:
+    - url: https://locust.infrastructurepath.online
+      title: Locust UI
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: anomaly-detector
+  description: Isolation Forest ML model — detects anomalies in service metrics and publishes to SQS
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-sherlock
+  tags:
+    - aiops
+    - ml
+    - python
+    - scikit-learn
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: forecaster
+  description: Facebook Prophet forecasting model — predicts resource utilisation and request rates
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-sherlock
+  tags:
+    - aiops
+    - ml
+    - python
+    - prophet
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: alert-correlator
+  description: Alert correlation engine — groups Alertmanager alerts into root-cause incidents
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-sherlock
+  tags:
+    - aiops
+    - ml
+    - python
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ai-agent
+  description: LangChain + Bedrock AI agent — auto-remediates anomalies via K8s actions and Slack notifications
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-sherlock
+  tags:
+    - aiops
+    - langchain
+    - bedrock
+    - claude
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: order-api
+  description: Order service REST API
+spec:
+  type: openapi
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Order Service API
+      version: "1.0.0"
+    paths:
+      /orders:
+        get:
+          summary: List orders
+      /orders/{id}:
+        get:
+          summary: Get order by ID
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: payment-api
+  description: Payment service REST API
+spec:
+  type: openapi
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Payment Service API
+      version: "1.0.0"
+    paths:
+      /payments:
+        post:
+          summary: Process payment
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: inventory-api
+  description: Inventory service REST API
+spec:
+  type: openapi
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Inventory Service API
+      version: "1.0.0"
+    paths:
+      /inventory:
+        get:
+          summary: List inventory items

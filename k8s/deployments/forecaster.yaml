@@ -1,0 +1,156 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forecaster
+  namespace: aiops-demo
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forecaster
+  namespace: aiops-demo
+  labels:
+    app: forecaster
+    team: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: forecaster
+  template:
+    metadata:
+      labels:
+        app: forecaster
+        team: platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: forecaster
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: train-models
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/forecaster:latest
+          command: ["python", "train.py"]
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus.monitoring.svc.cluster.local:9090"
+            - name: MODEL_DIR
+              value: "/models"
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      containers:
+        - name: forecaster
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/forecaster:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus.monitoring.svc.cluster.local:9090"
+            - name: MODEL_DIR
+              value: "/models"
+            - name: FORECAST_HORIZON_HOURS
+              value: "4"
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: model-storage
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forecaster
+  namespace: aiops-demo
+  labels:
+    app: forecaster
+spec:
+  selector:
+    app: forecaster
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+# Retrain every 6 hours
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: forecaster-retrain
+  namespace: aiops-demo
+spec:
+  schedule: "0 */6 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: forecaster
+          restartPolicy: OnFailure
+          containers:
+            - name: train
+              image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/forecaster:latest
+              command: ["python", "train.py"]
+              env:
+                - name: PROMETHEUS_URL
+                  value: "http://prometheus.monitoring.svc.cluster.local:9090"
+                - name: MODEL_DIR
+                  value: "/models"
+              volumeMounts:
+                - name: model-storage
+                  mountPath: /models
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 1Gi
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+          volumes:
+            - name: model-storage
+              emptyDir: {}

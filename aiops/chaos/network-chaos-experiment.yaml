@@ -1,0 +1,67 @@
+---
+# Network latency injection — adds 2000ms delay to order-service traffic
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: network-latency-order-service
+  namespace: apps
+spec:
+  appinfo:
+    appns: apps
+    applabel: "app=order-service"
+    appkind: deployment
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-network-latency
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "120"
+            - name: NETWORK_INTERFACE
+              value: eth0
+            - name: NETWORK_LATENCY
+              value: "2000"
+            - name: JITTER
+              value: "100"
+            - name: PODS_AFFECTED_PERC
+              value: "50"
+            - name: CONTAINER_RUNTIME
+              value: containerd
+            - name: SOCKET_PATH
+              value: /run/containerd/containerd.sock
+  engineState: active
+  annotationCheck: "false"
+
+---
+# Network packet loss — 20% loss on payment-service
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: network-loss-payment-service
+  namespace: apps
+spec:
+  appinfo:
+    appns: apps
+    applabel: "app=payment-service"
+    appkind: deployment
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-network-loss
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "120"
+            - name: NETWORK_INTERFACE
+              value: eth0
+            - name: NETWORK_PACKET_LOSS_PERCENTAGE
+              value: "20"
+            - name: PODS_AFFECTED_PERC
+              value: "50"
+            - name: CONTAINER_RUNTIME
+              value: containerd
+            - name: SOCKET_PATH
+              value: /run/containerd/containerd.sock
+  engineState: active
+  annotationCheck: "false"

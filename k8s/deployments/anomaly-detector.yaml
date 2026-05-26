@@ -1,0 +1,147 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aiops-demo
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: anomaly-detector
+  namespace: aiops-demo
+  annotations:
+    eks.amazonaws.com/role-arn: ""  # populated by configure-stack.sh or Terraform output
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anomaly-detector
+  namespace: aiops-demo
+  labels:
+    app: anomaly-detector
+    team: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: anomaly-detector
+        team: platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: anomaly-detector
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: train-model
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/anomaly-detector:latest
+          command: ["python", "train.py"]
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus.monitoring.svc.cluster.local:9090"
+            - name: MODEL_PATH
+              value: "/models/anomaly_model.pkl"
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: [ALL]
+      containers:
+        - name: anomaly-detector
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/anomaly-detector:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus.monitoring.svc.cluster.local:9090"
+            - name: MODEL_PATH
+              value: "/models/anomaly_model.pkl"
+            - name: SQS_QUEUE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: aiops-config
+                  key: SQS_QUEUE_URL
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+            - name: POLL_INTERVAL_SECONDS
+              value: "60"
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: model-storage
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: anomaly-detector
+  namespace: aiops-demo
+  labels:
+    app: anomaly-detector
+spec:
+  selector:
+    app: anomaly-detector
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiops-config
+  namespace: aiops-demo
+data:
+  SQS_QUEUE_URL: ""  # populated by configure-stack.sh with Terraform output
+  ARGOCD_URL: "http://argocd-server.argocd.svc.cluster.local"
+  PROMETHEUS_URL: "http://prometheus.monitoring.svc.cluster.local:9090"
+  ALERTMANAGER_URL: "http://alertmanager.monitoring.svc.cluster.local:9093"
+  LOKI_URL: "http://loki.monitoring.svc.cluster.local:3100"

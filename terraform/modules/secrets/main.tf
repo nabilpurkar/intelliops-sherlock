@@ -64,3 +64,14 @@ resource "aws_secretsmanager_secret" "defectdojo" {
 
   tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/defectdojo" })
 }
+
+resource "aws_secretsmanager_secret" "backstage" {
+  #checkov:skip=CKV2_AWS_57: Auto-rotation not configured — GitHub token rotated manually
+  #checkov:skip=CKV_AWS_149: KMS CMK not required for dev; set kms_key_id variable for staging/prod
+  name                    = "intelliops/${var.environment}/backstage"
+  description             = "Backstage IDP credentials — github_token for catalog integration"
+  recovery_window_in_days = var.recovery_window_in_days
+  kms_key_id              = var.kms_key_id
+
+  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/backstage" })
+}

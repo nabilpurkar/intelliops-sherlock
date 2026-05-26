@@ -62,7 +62,7 @@ info "Values dir : ${VALUES}"
 # secrets into them immediately without waiting for Helm --create-namespace.
 step "Pre-creating namespaces"
 
-for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco external-dns apps locust defectdojo kyverno gatekeeper-system; do
+for ns in cert-manager external-secrets linkerd database monitoring argocd kong sonarqube falco external-dns apps locust defectdojo kyverno gatekeeper-system backstage litmus aiops-demo; do
   if kubectl get namespace "${ns}" &>/dev/null; then
     warn "Namespace ${ns} already exists"
   else
@@ -337,16 +337,114 @@ kubectl apply -f "${REPO_ROOT}/k8s/slos/"
 success "PrometheusRule SLOs applied (order/payment/inventory — 99.9% availability SLO)"
 
 # ─── 25. Grafana dashboards provisioning ──────────────────────────────────────
-step "25/25  Grafana dashboards"
+step "25/28  Grafana dashboards"
 kubectl apply -f "${REPO_ROOT}/k8s/grafana/"
 success "Grafana dashboard ConfigMaps applied — sidecar will provision them automatically"
 info "Dashboards: Services Overview, SLO/Error Budget, DORA Metrics, Security/GRC, Cost"
 
-step "Security coverage complete"
+# ─── 26. Backstage IDP ────────────────────────────────────────────────────────
+step "26/28  Backstage IDP"
+
+info "Adding backstage helm repo ..."
+helm repo add backstage https://backstage.github.io/charts 2>/dev/null || true
+helm repo update backstage 2>/dev/null || true
+
+info "Applying Backstage ExternalSecret (reads intelliops/dev/backstage → github_token) ..."
+kubectl apply -f "${MANIFESTS}/backstage-secret.yaml"
+
+info "Installing Backstage ..."
+helm_install backstage backstage \
+  backstage/backstage \
+  -f "${VALUES}/backstage-values.yaml" \
+  --timeout 5m
+
+info "Applying Backstage ingress ..."
+kubectl apply -f "${INGRESS}/ingress-backstage.yaml"
+success "Backstage installed — https://backstage.infrastructurepath.online (may take 2–3 min to initialise)"
+info "Populate intelliops/dev/backstage → github_token in AWS SM before ExternalSecret can sync"
+
+# ─── 27. LitmusChaos ─────────────────────────────────────────────────────────
+step "27/28  LitmusChaos (chaos engineering)"
+
+info "Adding litmuschaos helm repo ..."
+helm repo add litmuschaos https://litmuschaos.github.io/litmus-helm/ 2>/dev/null || true
+helm repo update litmuschaos 2>/dev/null || true
+
+helm_install litmus litmus \
+  litmuschaos/litmus \
+  -f "${VALUES}/litmus-values.yaml" \
+  --timeout 5m
+
+success "LitmusChaos installed — portal at http://localhost:9091 (port-forward: kubectl port-forward svc/litmus-frontend-service 9091:9091 -n litmus)"
+info "Chaos experiments: ${REPO_ROOT}/aiops/chaos/"
+info "Apply experiments ONLY when deliberately running chaos: kubectl apply -f aiops/chaos/<experiment>.yaml"
+
+# ─── 28. AIOps workloads (namespace + config + deployments) ──────────────────
+step "28/28  AIOps workloads (anomaly-detector, forecaster, alert-correlator, ai-agent)"
+
+info "Applying aiops-config ConfigMap + namespace resources ..."
+kubectl apply -f "${REPO_ROOT}/k8s/deployments/anomaly-detector.yaml"
+
+info "Updating aiops-config SQS_QUEUE_URL from Terraform output ..."
+SQS_URL=$(cd "${REPO_ROOT}/terraform/environments/dev" && \
+  terraform output -raw 2>/dev/null <<< "" || true)
+# If terraform CLI unavailable, try AWS directly
+if [ -z "${SQS_URL}" ]; then
+  ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
+  REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
+  SQS_URL="https://sqs.${REGION}.amazonaws.com/${ACCOUNT_ID}/intelliops-anomalies"
+fi
+if [ -n "${SQS_URL}" ]; then
+  kubectl patch configmap aiops-config -n aiops-demo \
+    --type merge \
+    -p "{\"data\":{\"SQS_QUEUE_URL\":\"${SQS_URL}\"}}" 2>/dev/null || true
+  info "SQS URL set to: ${SQS_URL}"
+fi
+
+info "Applying forecaster ..."
+kubectl apply -f "${REPO_ROOT}/k8s/deployments/forecaster.yaml"
+
+info "Applying alert-correlator ..."
+kubectl apply -f "${REPO_ROOT}/k8s/deployments/alert-correlator.yaml"
+
+info "Applying Slack ExternalSecret ..."
+kubectl apply -f "${MANIFESTS}/slack-secret.yaml"
+
+info "Applying AI agent ..."
+kubectl apply -f "${REPO_ROOT}/k8s/deployments/ai-agent.yaml"
+
+# Annotate ServiceAccounts with IRSA role ARNs from Terraform
+AI_AGENT_ROLE=$(aws iam get-role --role-name "intelliops-dev-ai-agent-role" \
+  --query Role.Arn --output text 2>/dev/null || echo "")
+ANOMALY_ROLE=$(aws iam get-role --role-name "intelliops-dev-anomaly-detector-role" \
+  --query Role.Arn --output text 2>/dev/null || echo "")
+
+if [ -n "${AI_AGENT_ROLE}" ]; then
+  kubectl annotate serviceaccount ai-agent -n aiops-demo \
+    "eks.amazonaws.com/role-arn=${AI_AGENT_ROLE}" --overwrite
+  kubectl patch deployment ai-agent -n aiops-demo \
+    -p '{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"'"$(date -u +%FT%TZ)"'"}}}}}' \
+    2>/dev/null || true
+  success "AI agent IRSA role annotated: ${AI_AGENT_ROLE}"
+fi
+
+if [ -n "${ANOMALY_ROLE}" ]; then
+  kubectl annotate serviceaccount anomaly-detector -n aiops-demo \
+    "eks.amazonaws.com/role-arn=${ANOMALY_ROLE}" --overwrite
+  success "Anomaly detector IRSA role annotated: ${ANOMALY_ROLE}"
+fi
+
+success "AIOps workloads applied to namespace aiops-demo"
+info "Populate intelliops/dev/slack → webhook_url in AWS SM to enable Slack notifications"
+info "Models will train on first startup (initContainers) — allow 2–5 min before predictions start"
+
+step "Stack installation complete"
 info "Security tools: Kyverno, OPA Gatekeeper, Falco, SonarQube, DefectDojo"
 info "CI pipeline:    Semgrep, Trivy, Checkov, Gitleaks, OWASP Dep-Check, Cosign, ZAP, Infracost"
 info "Observability:  Prometheus, Grafana, Loki, Tempo, OTEL, OpenCost, Pushgateway"
-info "SLOs:           99.9% availability + P95 latency for order/payment/inventory services"
+info "AIOps:          anomaly-detector, forecaster, alert-correlator, ai-agent (Bedrock/Claude)"
+info "IDP:            Backstage at https://backstage.infrastructurepath.online"
+info "Chaos:          LitmusChaos — apply experiments from aiops/chaos/ manually"
 
 # ─── Verify ───────────────────────────────────────────────────────────────────
 step "Verification"

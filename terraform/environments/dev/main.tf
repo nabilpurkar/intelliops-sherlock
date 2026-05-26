@@ -84,6 +84,21 @@ module "secrets" {
   # pass module.eks.kms_key_arn here for staging/prod once KMS is enabled
 }
 
+module "aiops" {
+  source = "../../modules/aiops"
+
+  environment    = "dev"
+  project        = "intelliops"
+  aws_account_id = "007066145518"
+  aws_region     = "us-east-1"
+
+  cluster_name          = module.eks.cluster_name
+  eks_oidc_provider_arn = module.eks.oidc_provider_arn
+  eks_oidc_provider_url = module.eks.oidc_provider_url
+
+  recovery_window_in_days = 0
+}
+
 module "eks" {
   source = "../../modules/eks"
 
