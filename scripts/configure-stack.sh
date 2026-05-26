@@ -368,7 +368,8 @@ else
   kubectl apply -f "${REPO_ROOT}/k8s/argocd/project.yaml"
   kubectl apply -f "${REPO_ROOT}/k8s/argocd/microservices-app.yaml"
   kubectl apply -f "${REPO_ROOT}/k8s/argocd/locust-app.yaml"
-  success "ArgoCD Applications registered"
+  kubectl apply -f "${REPO_ROOT}/k8s/argocd/aiops-app.yaml"
+  success "ArgoCD Applications registered (microservices + locust + aiops)"
 
   wait_for_url "ArgoCD API" "${ARGOCD_URL}/api/v1/session" 30 10
 

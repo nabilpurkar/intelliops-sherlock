@@ -47,7 +47,10 @@ module "ecr" {
 
   environment = "dev"
   project     = "intelliops"
-  services    = ["order-service", "payment-service", "inventory-service", "load-generator"]
+  services = [
+    "order-service", "payment-service", "inventory-service", "load-generator",
+    "anomaly-detector", "forecaster", "alert-correlator", "ai-agent",
+  ]
 }
 
 module "iam" {

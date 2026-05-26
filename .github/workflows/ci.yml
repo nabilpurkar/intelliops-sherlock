@@ -1,8 +1,12 @@
 name: CI — Platform
 
-# Platform repo pipeline: secret scanning + IaC security scan.
-# Service builds run in their own repos (intelliops-{order,payment,inventory,load-generator}-service)
-# and dispatch back here via repository_dispatch → _manifest-update.yml.
+# Platform repo pipeline:
+#   - Secret scanning (always)
+#   - IaC scan (when terraform/ changes)
+#   - AIOps image build+push (when aiops/ changes, main branch only)
+#
+# Microservice builds run in their own repos and dispatch back here
+# via repository_dispatch → _manifest-update.yml.
 
 on:
   push:
@@ -18,12 +22,18 @@ permissions:
   contents: read
   security-events: write
 
+env:
+  AWS_ACCOUNT_ID: "007066145518"
+  AWS_REGION: us-east-1
+  ROLE_ARN: arn:aws:iam::007066145518:role/github-actions-role
+
 jobs:
 
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
       terraform: ${{ steps.filter.outputs.terraform }}
+      aiops: ${{ steps.filter.outputs.aiops }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -32,6 +42,8 @@ jobs:
           filters: |
             terraform:
               - 'terraform/**'
+            aiops:
+              - 'aiops/**'
 
   # ── Stage 1: Secret scanning (always) ────────────────────────────────────────
   gitleaks:
@@ -49,5 +61,20 @@ jobs:
       defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
       infracost_api_key: ${{ secrets.INFRACOST_API_KEY }}
     permissions:
+      contents: read
+      security-events: write
+
+  # ── Stage 3: AIOps image build + push (when aiops/ changed, main only) ────────
+  build-aiops:
+    needs: [detect-changes, gitleaks]
+    if: needs.detect-changes.outputs.aiops == 'true' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/_aiops-build-push.yml
+    with:
+      aws_account_id: "007066145518"
+      aws_region: us-east-1
+      role_arn: arn:aws:iam::007066145518:role/github-actions-role
+      image_tag: ${{ github.sha }}
+    permissions:
+      id-token: write
       contents: read
       security-events: write
