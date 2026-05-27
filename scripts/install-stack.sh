@@ -57,6 +57,151 @@ info "Cluster reachable"
 info "Charts dir : ${CHARTS}"
 info "Values dir : ${VALUES}"
 
+# ─── 0. Bootstrap AWS Secrets Manager ────────────────────────────────────────
+# Terraform creates SM secret containers with NO values. ESO will fail to sync
+# any ExternalSecret, and pods that mount those k8s Secrets won't start.
+# This step seeds every secret that is still empty before anything else runs.
+step "0/N  Bootstrap AWS Secrets Manager secrets"
+
+REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
+
+_sm_has_value() {
+  local secret_id=$1 key=$2
+  local val
+  val=$(aws secretsmanager get-secret-value \
+    --secret-id "${secret_id}" --region "${REGION}" \
+    --query SecretString --output text 2>/dev/null \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('${key}',''))" 2>/dev/null || echo "")
+  [ -n "${val}" ]
+}
+
+_sm_put() {
+  aws secretsmanager put-secret-value \
+    --secret-id "$1" --region "${REGION}" --secret-string "$2" \
+    --query VersionId --output text 2>/dev/null
+}
+
+# ── postgresql ──────────────────────────────────────────────────────────────
+if ! _sm_has_value "intelliops/dev/postgresql" "postgres_password"; then
+  info "Seeding intelliops/dev/postgresql ..."
+  PG=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
+  SQ=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
+  KG=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
+  DJ=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
+  _sm_put "intelliops/dev/postgresql" \
+    "{\"postgres_password\":\"${PG}\",\"sonarqube_password\":\"${SQ}\",\"kong_password\":\"${KG}\",\"defectdojo_password\":\"${DJ}\"}"
+  success "intelliops/dev/postgresql seeded"
+else
+  info "intelliops/dev/postgresql — already has values"
+fi
+
+# ── defectdojo ──────────────────────────────────────────────────────────────
+if ! _sm_has_value "intelliops/dev/defectdojo" "admin_password"; then
+  info "Seeding intelliops/dev/defectdojo ..."
+  DJ_PASS=$(aws secretsmanager get-secret-value \
+    --secret-id intelliops/dev/postgresql --region "${REGION}" \
+    --query SecretString --output text \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['defectdojo_password'])")
+  DJ_SK=$(openssl rand -base64 32)
+  DJ_AES=$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 32)
+  DJ_METRICS=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)
+  DJ_VALKEY=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
+  _sm_put "intelliops/dev/defectdojo" \
+    "{\"admin_password\":\"${DJ_PASS}\",\"secret_key\":\"${DJ_SK}\",\"credential_aes256_key\":\"${DJ_AES}\",\"metrics_http_auth_password\":\"${DJ_METRICS}\",\"valkey_password\":\"${DJ_VALKEY}\"}"
+  success "intelliops/dev/defectdojo seeded"
+else
+  info "intelliops/dev/defectdojo — already has values"
+fi
+
+# ── argocd ──────────────────────────────────────────────────────────────────
+if ! _sm_has_value "intelliops/dev/argocd" "admin_password"; then
+  info "Seeding intelliops/dev/argocd ..."
+  _sm_put "intelliops/dev/argocd" \
+    "{\"admin_password\":\"$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)\"}"
+  success "intelliops/dev/argocd seeded"
+else
+  info "intelliops/dev/argocd — already has values"
+fi
+
+# ── grafana ──────────────────────────────────────────────────────────────────
+if ! _sm_has_value "intelliops/dev/grafana" "admin_password"; then
+  info "Seeding intelliops/dev/grafana ..."
+  _sm_put "intelliops/dev/grafana" \
+    "{\"admin_password\":\"$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)\"}"
+  success "intelliops/dev/grafana seeded"
+else
+  info "intelliops/dev/grafana — already has values"
+fi
+
+# ── sonarqube — must be "admin" (default) so configure-stack.sh can log in ──
+if ! _sm_has_value "intelliops/dev/sonarqube" "admin_password"; then
+  info "Seeding intelliops/dev/sonarqube (default admin password) ..."
+  _sm_put "intelliops/dev/sonarqube" '{"admin_password":"admin"}'
+  success "intelliops/dev/sonarqube seeded"
+else
+  info "intelliops/dev/sonarqube — already has values"
+fi
+
+# ── litmus MongoDB ───────────────────────────────────────────────────────────
+if ! _sm_has_value "intelliops/dev/litmus" "mongodb_root_password"; then
+  info "Seeding intelliops/dev/litmus (MongoDB credentials) ..."
+  _sm_put "intelliops/dev/litmus" \
+    "{\"mongodb_root_password\":\"$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)\",\"mongodb_root_user\":\"root\"}"
+  success "intelliops/dev/litmus seeded"
+else
+  info "intelliops/dev/litmus — already has values"
+fi
+
+# ── backstage — placeholder until a real GitHub token is provided ────────────
+if ! _sm_has_value "intelliops/dev/backstage" "github_token"; then
+  info "Seeding intelliops/dev/backstage (placeholder — update with real GitHub token) ..."
+  _sm_put "intelliops/dev/backstage" '{"github_token":"ghp_placeholder_replace_with_real_token"}'
+  success "intelliops/dev/backstage seeded (placeholder)"
+else
+  info "intelliops/dev/backstage — already has values"
+fi
+
+# ── slack — placeholder until a real webhook is provided ────────────────────
+if ! _sm_has_value "intelliops/dev/slack" "webhook_url"; then
+  info "Seeding intelliops/dev/slack (placeholder — update with real Slack webhook) ..."
+  _sm_put "intelliops/dev/slack" '{"webhook_url":"https://hooks.slack.com/services/placeholder"}'
+  success "intelliops/dev/slack seeded (placeholder)"
+else
+  info "intelliops/dev/slack — already has values"
+fi
+
+# ── Linkerd PKI — generate certs if SM secret is empty ──────────────────────
+if ! _sm_has_value "intelliops/dev/linkerd" "ca_crt_b64"; then
+  info "Linkerd PKI not found in SM — generating trust anchor + issuer certs ..."
+  command -v step &>/dev/null || die "step CLI not found — install: brew install step / sudo apt install step-cli"
+
+  TMPDIR_LINKERD=$(mktemp -d)
+  trap 'rm -rf "${TMPDIR_LINKERD}"' EXIT
+
+  step certificate create root.linkerd.cluster.local \
+    "${TMPDIR_LINKERD}/ca.crt" "${TMPDIR_LINKERD}/ca.key" \
+    --profile root-ca --no-password --insecure \
+    --not-after 87600h 2>/dev/null
+
+  step certificate create identity.linkerd.cluster.local \
+    "${TMPDIR_LINKERD}/issuer.crt" "${TMPDIR_LINKERD}/issuer.key" \
+    --profile intermediate-ca --no-password --insecure \
+    --ca "${TMPDIR_LINKERD}/ca.crt" --ca-key "${TMPDIR_LINKERD}/ca.key" \
+    --not-after 8760h 2>/dev/null
+
+  CA_B64=$(base64 -w0 "${TMPDIR_LINKERD}/ca.crt")
+  ISSUER_CRT_B64=$(base64 -w0 "${TMPDIR_LINKERD}/issuer.crt")
+  ISSUER_KEY_B64=$(base64 -w0 "${TMPDIR_LINKERD}/issuer.key")
+
+  _sm_put "intelliops/dev/linkerd" \
+    "{\"ca_crt_b64\":\"${CA_B64}\",\"issuer_crt_b64\":\"${ISSUER_CRT_B64}\",\"issuer_key_b64\":\"${ISSUER_KEY_B64}\"}"
+  success "Linkerd PKI generated and stored in SM"
+else
+  info "intelliops/dev/linkerd — PKI already present in SM"
+fi
+
+success "All SM secrets bootstrapped"
+
 # ─── Pre-create namespaces ────────────────────────────────────────────────────
 # Namespaces must exist before ExternalSecrets are applied so ESO can sync
 # secrets into them immediately without waiting for Helm --create-namespace.
@@ -160,37 +305,40 @@ step "9/19  linkerd-crds"
 helm_install linkerd-crds linkerd \
   "${CHARTS}/linkerd-crds"
 
-# ─── 9b. linkerd-identity-issuer secret ──────────────────────────────────────
-# Linkerd reads issuer certs from a pre-existing k8s TLS secret.
-# Certs are stored in Secrets Manager (intelliops/dev/linkerd) as base64 fields.
+# ─── 9b. linkerd-identity-issuer secret + trust anchor ───────────────────────
+# Both the issuer cert/key and the trust anchor CA cert are read from SM so
+# nothing is hardcoded in the repo. SM was populated in step 0 above.
 step "9b/19  linkerd-identity-issuer secret"
+
+LINKERD_JSON=$(aws secretsmanager get-secret-value \
+  --secret-id intelliops/dev/linkerd --region "${REGION}" \
+  --query SecretString --output text) \
+  || die "Failed to read intelliops/dev/linkerd from SM"
+
+LINKERD_CA_CRT=$(echo "${LINKERD_JSON}" | python3 -c \
+  "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['ca_crt_b64']).decode())")
+LINKERD_ISSUER_CRT=$(echo "${LINKERD_JSON}" | python3 -c \
+  "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_crt_b64']).decode())")
+LINKERD_ISSUER_KEY=$(echo "${LINKERD_JSON}" | python3 -c \
+  "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_key_b64']).decode())")
 
 if kubectl get secret linkerd-identity-issuer -n linkerd &>/dev/null; then
   warn "linkerd-identity-issuer already exists — skipping"
 else
-  info "Fetching Linkerd issuer certs from AWS Secrets Manager ..."
-  LINKERD_JSON=$(aws secretsmanager get-secret-value \
-    --secret-id intelliops/dev/linkerd \
-    --query SecretString --output text)
-
-  ISSUER_CRT=$(echo "${LINKERD_JSON}" | python3 -c \
-    "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_crt']).decode())")
-  ISSUER_KEY=$(echo "${LINKERD_JSON}" | python3 -c \
-    "import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d['issuer_key']).decode())")
-
   kubectl create secret tls linkerd-identity-issuer \
     --namespace linkerd \
-    --cert=<(echo "${ISSUER_CRT}") \
-    --key=<(echo "${ISSUER_KEY}")
-
-  success "linkerd-identity-issuer created"
+    --cert=<(echo "${LINKERD_ISSUER_CRT}") \
+    --key=<(echo "${LINKERD_ISSUER_KEY}")
+  success "linkerd-identity-issuer created from SM"
 fi
 
 # ─── 10. linkerd-control-plane ───────────────────────────────────────────────
+# Trust anchor is injected at install time from SM — not hardcoded in values file.
 step "10/19  linkerd-control-plane"
 helm_install linkerd-control-plane linkerd \
   "${CHARTS}/linkerd-control-plane" \
-  -f "${VALUES}/linkerd-control-plane-values.yaml"
+  -f "${VALUES}/linkerd-control-plane-values.yaml" \
+  --set-string "identityTrustAnchorsPEM=${LINKERD_CA_CRT}"
 
 # ─── 11. argocd ──────────────────────────────────────────────────────────────
 step "11/19  argocd"
@@ -262,6 +410,21 @@ kubectl apply -f "${REPO_ROOT}/k8s/argocd/microservices-app.yaml"
 kubectl apply -f "${REPO_ROOT}/k8s/argocd/locust-app.yaml"
 
 success "ArgoCD Applications registered — they will sync k8s/apps/ and k8s/load-generator/ automatically"
+
+# ── Locust probe fix: load-generator runs headless (no web UI on port 8089).
+# The ArgoCD-synced deployment has an HTTP liveness probe on 8089 which kills
+# the pod ~70s after start (SIGTERM → exit 1 → CrashLoopBackOff).
+# Patch it out here after ArgoCD creates the deployment.
+info "Waiting up to 60s for ArgoCD to sync locust deployment ..."
+for _i in $(seq 1 12); do
+  if kubectl get deployment locust -n locust &>/dev/null 2>&1; then
+    kubectl patch deployment locust -n locust --type=strategic \
+      -p='{"spec":{"template":{"spec":{"containers":[{"name":"locust","livenessProbe":null,"readinessProbe":null}]}}}}' \
+      2>/dev/null && success "Locust HTTP probes removed (headless container)" || true
+    break
+  fi
+  sleep 5
+done
 
 # ─── 17. falco ───────────────────────────────────────────────────────────────
 step "17/22  falco"
@@ -369,6 +532,26 @@ step "27/28  LitmusChaos (chaos engineering)"
 info "Adding litmuschaos helm repo ..."
 helm repo add litmuschaos https://litmuschaos.github.io/litmus-helm/ 2>/dev/null || true
 helm repo update litmuschaos 2>/dev/null || true
+
+# Create MongoDB credentials k8s secret from SM so nothing is hardcoded in values
+if ! kubectl get secret litmus-mongodb-secret -n litmus &>/dev/null; then
+  info "Creating litmus-mongodb-secret from SM (intelliops/dev/litmus) ..."
+  LITMUS_JSON=$(aws secretsmanager get-secret-value \
+    --secret-id intelliops/dev/litmus --region "${REGION}" \
+    --query SecretString --output text)
+  LITMUS_MONGO_PASS=$(echo "${LITMUS_JSON}" | python3 -c \
+    "import sys,json; print(json.load(sys.stdin)['mongodb_root_password'])")
+  LITMUS_MONGO_USER=$(echo "${LITMUS_JSON}" | python3 -c \
+    "import sys,json; print(json.load(sys.stdin)['mongodb_root_user'])")
+  kubectl create secret generic litmus-mongodb-secret -n litmus \
+    --from-literal=mongodb-root-password="${LITMUS_MONGO_PASS}" \
+    --from-literal=mongodb-passwords="${LITMUS_MONGO_PASS}" \
+    --from-literal=mongodb-replica-set-key="$(openssl rand -base64 32)" \
+    --from-literal=mongodb-metrics-password="$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)"
+  success "litmus-mongodb-secret created"
+else
+  warn "litmus-mongodb-secret already exists — skipping"
+fi
 
 helm_install litmus litmus \
   litmuschaos/litmus \

@@ -75,3 +75,36 @@ resource "aws_secretsmanager_secret" "backstage" {
 
   tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/backstage" })
 }
+
+resource "aws_secretsmanager_secret" "litmus" {
+  #checkov:skip=CKV2_AWS_57: Auto-rotation not configured — rotated manually
+  #checkov:skip=CKV_AWS_149: KMS CMK not required for dev; set kms_key_id variable for staging/prod
+  name                    = "intelliops/${var.environment}/litmus"
+  description             = "LitmusChaos MongoDB credentials — mongodb_root_user, mongodb_root_password"
+  recovery_window_in_days = var.recovery_window_in_days
+  kms_key_id              = var.kms_key_id
+
+  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/litmus" })
+}
+
+resource "aws_secretsmanager_secret" "slack" {
+  #checkov:skip=CKV2_AWS_57: Auto-rotation not configured — webhook rotated manually
+  #checkov:skip=CKV_AWS_149: KMS CMK not required for dev; set kms_key_id variable for staging/prod
+  name                    = "intelliops/${var.environment}/slack"
+  description             = "Slack webhook URL for AIOps alert notifications"
+  recovery_window_in_days = var.recovery_window_in_days
+  kms_key_id              = var.kms_key_id
+
+  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/slack" })
+}
+
+resource "aws_secretsmanager_secret" "sonarqube" {
+  #checkov:skip=CKV2_AWS_57: Auto-rotation not configured — rotated by configure-stack.sh
+  #checkov:skip=CKV_AWS_149: KMS CMK not required for dev; set kms_key_id variable for staging/prod
+  name                    = "intelliops/${var.environment}/sonarqube"
+  description             = "SonarQube credentials — admin_password, ci_token"
+  recovery_window_in_days = var.recovery_window_in_days
+  kms_key_id              = var.kms_key_id
+
+  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/sonarqube" })
+}

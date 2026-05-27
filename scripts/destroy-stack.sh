@@ -255,6 +255,18 @@ success "AWS resource cleanup complete"
 # ── Step 5: Delete custom namespaces ──────────────────────────────────────────
 step "5/8  Delete namespaces"
 
+# Remove ESO finalizers from ALL ExternalSecrets before deleting namespaces.
+# When ESO is uninstalled first (step 3), its controller is gone and can no
+# longer process finalizer-removal — causing namespaces to stick in Terminating.
+info "Removing ExternalSecret finalizers to prevent stuck Terminating namespaces ..."
+for ns in $(kubectl get ns -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+  for es in $(kubectl get externalsecrets -n "${ns}" -o name 2>/dev/null); do
+    kubectl patch "${es}" -n "${ns}" --type=json \
+      -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+  done
+done
+success "ExternalSecret finalizers cleared"
+
 for ns in "${CUSTOM_NAMESPACES[@]}"; do
   if kubectl get namespace "${ns}" &>/dev/null 2>&1; then
     info "Deleting namespace: ${ns} ..."

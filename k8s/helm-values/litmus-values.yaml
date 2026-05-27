@@ -41,10 +41,13 @@ mongodb:
   persistence:
     storageClass: gp2
     size: 5Gi
+  auth:
+    # Credentials come from a k8s Secret created by install-stack.sh from
+    # AWS Secrets Manager (intelliops/dev/litmus) — nothing hardcoded here.
+    existingSecret: litmus-mongodb-secret
 
 adminConfig:
   DBUSER: "admin"
-  DBPASSWORD: "litmus"
   DB_PORT: "27017"
-  # DB_SERVER intentionally not set — template generates:
+  # DB_SERVER intentionally not set — chart template generates correct URI:
   # mongodb://litmus-mongodb-0.litmus-mongodb-headless:27017/admin
