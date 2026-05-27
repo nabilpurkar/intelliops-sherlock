@@ -5,13 +5,6 @@
 opencost:
   exporter:
     defaultClusterId: intelliops-dev
-    # Connect to the kube-prometheus-stack Prometheus
-    prometheus:
-      internal:
-        enabled: false
-      external:
-        enabled: true
-        url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
     resources:
       requests:
         cpu: 10m
@@ -19,6 +12,14 @@ opencost:
       limits:
         cpu: 100m
         memory: 256Mi
+
+  # Chart helper reads opencost.prometheus.external, NOT opencost.exporter.prometheus
+  prometheus:
+    internal:
+      enabled: false
+    external:
+      enabled: true
+      url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
 
   ui:
     enabled: true

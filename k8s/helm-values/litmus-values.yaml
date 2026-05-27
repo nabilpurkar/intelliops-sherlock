@@ -36,8 +36,15 @@ mongo:
   persistence:
     size: 5Gi
 
+mongodb:
+  replicaCount: 1
+  persistence:
+    storageClass: gp2
+    size: 5Gi
+
 adminConfig:
   DBUSER: "admin"
   DBPASSWORD: "litmus"
-  DB_SERVER: "mongo-service"
   DB_PORT: "27017"
+  # DB_SERVER intentionally not set — template generates:
+  # mongodb://litmus-mongodb-0.litmus-mongodb-headless:27017/admin

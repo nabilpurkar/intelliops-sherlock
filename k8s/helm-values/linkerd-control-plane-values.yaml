@@ -2,21 +2,21 @@
 # install: helm upgrade --install linkerd-control-plane linkerd/linkerd-control-plane --version 1.16.11 -n linkerd --create-namespace -f linkerd-control-plane-values.yaml
 # Prerequisite: linkerd-crds must be installed first.
 # Certs backed up in AWS Secrets Manager: intelliops/dev/linkerd
-# Trust anchor valid until: 2036-05-22  |  Issuer valid until: 2027-05-25
+# Trust anchor valid until: 2036-05-23  |  Issuer valid until: 2027-05-26
 
 controllerLogLevel: info
 
 identityTrustAnchorsPEM: |
   -----BEGIN CERTIFICATE-----
-  MIIBjTCCATSgAwIBAgIRAIY65EIywn1v3/83XvZh9eowCgYIKoZIzj0EAwIwJTEj
-  MCEGA1UEAxMacm9vdC5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMjYwNTI1MTAy
-  MzQzWhcNMzYwNTIyMTAyMzQzWjAlMSMwIQYDVQQDExpyb290LmxpbmtlcmQuY2x1
-  c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNPHldMIt8Jw3y89
-  6Cpqb1YpDjiXclBaQign3QX8rHuYuhUcT/t3VuoA3oEg5S+jUy3l+VzoPetF/Hp6
-  7dHh4GOjRTBDMA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8ECDAGAQH/AgEBMB0G
-  A1UdDgQWBBSK67ZKRRgqKlyOICXJeLpixnN2ATAKBggqhkjOPQQDAgNHADBEAiAb
-  n2AJOcl+rWCfTTx0zdV6RBEYaJMyRm4DhfbeoejA1wIgUUUnCr29LA+5FF3WDud9
-  FocCIS9WOOkxakMWeHwg6zk=
+  MIIBjDCCATOgAwIBAgIQV3wAtavscrD1SJn3Cs8XTjAKBggqhkjOPQQDAjAlMSMw
+  IQYDVQQDExpyb290LmxpbmtlcmQuY2x1c3Rlci5sb2NhbDAeFw0yNjA1MjYyMjE5
+  MTBaFw0zNjA1MjMyMjE5MTBaMCUxIzAhBgNVBAMTGnJvb3QubGlua2VyZC5jbHVz
+  dGVyLmxvY2FsMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+AM2kZVb/F9cSDIA
+  b0UFqAWhpl8o9oNB9Cu5JtOUVzt2u3izg73UFtxkw+Q4/mhXwtzdon5vpgxsmvhO
+  lrXM9KNFMEMwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwHQYD
+  VR0OBBYEFONsv8anGe3Nfgmi4IqiVjjcGTVeMAoGCCqGSM49BAMCA0cAMEQCIDAV
+  nEDvqkcYtLDq41C2SKfijIG3tAo8+zkg8bfGX2CQAiA/bmvqfMbtESBuuRozQGKy
+  rJC1cpSLSsO1q2/DWMJYRA==
   -----END CERTIFICATE-----
 
 identity:
