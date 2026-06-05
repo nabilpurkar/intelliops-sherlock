@@ -114,7 +114,7 @@ spec:
         - record: slo:payment_service:latency_p95_5m
           expr: |
             histogram_quantile(0.95,
-              sum(rate(payment_request_duration_seconds_bucket[5m])) by (le))
+              sum(rate(payment_request_duration_secs_bucket[5m])) by (le))
 
         - record: slo:payment_service:availability_rate1h
           expr: "1 - slo:payment_service:error_rate1h"
@@ -167,7 +167,7 @@ spec:
         - record: slo:inventory_service:latency_p95_5m
           expr: |
             histogram_quantile(0.95,
-              sum(rate(inventory_request_duration_seconds_bucket[5m])) by (le))
+              sum(rate(inventory_request_duration_secs_bucket[5m])) by (le))
 
         - record: slo:inventory_service:availability_rate1h
           expr: "1 - slo:inventory_service:error_rate1h"

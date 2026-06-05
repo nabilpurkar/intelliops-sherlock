@@ -546,6 +546,10 @@ step "24/25  SLO recording rules + alerts"
 kubectl apply -f "${REPO_ROOT}/k8s/slos/"
 success "PrometheusRule SLOs applied (order/payment/inventory — 99.9% availability SLO)"
 
+info "Applying ServiceMonitors for microservice metrics scraping ..."
+kubectl apply -f "${REPO_ROOT}/k8s/apps/servicemonitors.yaml"
+success "ServiceMonitors applied — Prometheus will scrape order/payment/inventory /metrics"
+
 # ─── 25. Grafana dashboards provisioning ──────────────────────────────────────
 step "25/28  Grafana dashboards"
 kubectl apply -f "${REPO_ROOT}/k8s/grafana/"

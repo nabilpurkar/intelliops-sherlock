@@ -1,0 +1,606 @@
+---
+# API Endpoints Performance Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-endpoints
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "IntelliOps"
+data:
+  api-endpoints.json: |
+    {
+      "id": null,
+      "uid": "intelliops-api-endpoints",
+      "title": "API Endpoints Performance",
+      "tags": ["intelliops", "endpoints", "performance"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "30s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {
+          "id": 1,
+          "type": "row",
+          "title": "Order Service Endpoints",
+          "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 2,
+          "type": "table",
+          "title": "Order Service — Top Endpoints by Request Rate",
+          "gridPos": {"x": 0, "y": 1, "w": 24, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background-solid",
+                "inspect": false
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "endpoint"},
+                "properties": [{"id": "custom.width", "value": 250}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "method"},
+                "properties": [{"id": "custom.width", "value": 80}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Value"},
+                "properties": [
+                  {"id": "displayName", "value": "Req/s"},
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {"color": "green", "value": null},
+                        {"color": "yellow", "value": 1},
+                        {"color": "orange", "value": 5}
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [{"displayName": "Req/s", "desc": true}],
+            "footer": {"show": false}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "topk(10, sum(rate(order_requests_total[5m])) by (endpoint, method))",
+              "instant": true,
+              "legendFormat": "{{endpoint}} [{{method}}]",
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {"id": "labelsToFields", "options": {"mode": "columns"}},
+            {"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true}, "renameByName": {}}}
+          ]
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "Order Service — Request Rate by Endpoint",
+          "gridPos": {"x": 0, "y": 9, "w": 12, "h": 9},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(order_requests_total[5m])) by (endpoint)",
+              "legendFormat": "{{endpoint}}"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Order Service — Error Rate by Endpoint",
+          "gridPos": {"x": 12, "y": 9, "w": 12, "h": 9},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 0.01},
+                  {"color": "red", "value": 0.05}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(order_requests_total{status=~\"5..\"}[5m])) by (endpoint) / sum(rate(order_requests_total[5m])) by (endpoint)",
+              "legendFormat": "{{endpoint}}"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Order Service — P95 Latency by Endpoint",
+          "gridPos": {"x": 0, "y": 18, "w": 24, "h": 9},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 0.5},
+                  {"color": "red", "value": 1}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "histogram_quantile(0.95, sum(rate(order_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+              "legendFormat": "{{endpoint}} P95"
+            }
+          ]
+        },
+        {
+          "id": 20,
+          "type": "row",
+          "title": "Payment Service Endpoints",
+          "gridPos": {"x": 0, "y": 27, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 21,
+          "type": "table",
+          "title": "Payment Service — Top Endpoints by Request Rate",
+          "gridPos": {"x": 0, "y": 28, "w": 24, "h": 7},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background-solid",
+                "inspect": false
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "endpoint"},
+                "properties": [{"id": "custom.width", "value": 250}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "method"},
+                "properties": [{"id": "custom.width", "value": 80}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Value"},
+                "properties": [
+                  {"id": "displayName", "value": "Req/s"},
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {"color": "green", "value": null},
+                        {"color": "yellow", "value": 1},
+                        {"color": "orange", "value": 5}
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [{"displayName": "Req/s", "desc": true}],
+            "footer": {"show": false}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "topk(5, sum(rate(payment_requests_total[5m])) by (endpoint, method))",
+              "instant": true,
+              "legendFormat": "{{endpoint}} [{{method}}]",
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {"id": "labelsToFields", "options": {"mode": "columns"}},
+            {"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true}, "renameByName": {}}}
+          ]
+        },
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Payment Service — Request Rate by Endpoint",
+          "gridPos": {"x": 0, "y": 35, "w": 12, "h": 9},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(payment_requests_total[5m])) by (endpoint)",
+              "legendFormat": "{{endpoint}}"
+            }
+          ]
+        },
+        {
+          "id": 23,
+          "type": "timeseries",
+          "title": "Payment Service — Error Rate by Endpoint",
+          "gridPos": {"x": 12, "y": 35, "w": 12, "h": 9},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 0.01},
+                  {"color": "red", "value": 0.05}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(payment_requests_total{status=~\"5..\"}[5m])) by (endpoint) / sum(rate(payment_requests_total[5m])) by (endpoint)",
+              "legendFormat": "{{endpoint}}"
+            }
+          ]
+        },
+        {
+          "id": 24,
+          "type": "timeseries",
+          "title": "Payment Service — P95 Latency by Endpoint",
+          "gridPos": {"x": 0, "y": 44, "w": 24, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "histogram_quantile(0.95, sum(rate(payment_request_duration_secs_bucket[5m])) by (le, endpoint))",
+              "legendFormat": "{{endpoint}} P95"
+            }
+          ]
+        },
+        {
+          "id": 30,
+          "type": "row",
+          "title": "Inventory Service Endpoints",
+          "gridPos": {"x": 0, "y": 52, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 31,
+          "type": "table",
+          "title": "Inventory Service — Top Endpoints by Request Rate",
+          "gridPos": {"x": 0, "y": 53, "w": 24, "h": 7},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background-solid",
+                "inspect": false
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "endpoint"},
+                "properties": [{"id": "custom.width", "value": 250}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "method"},
+                "properties": [{"id": "custom.width", "value": 80}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Value"},
+                "properties": [
+                  {"id": "displayName", "value": "Req/s"},
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {"color": "green", "value": null},
+                        {"color": "yellow", "value": 1},
+                        {"color": "orange", "value": 5}
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [{"displayName": "Req/s", "desc": true}],
+            "footer": {"show": false}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "topk(5, sum(rate(inventory_requests_total[5m])) by (endpoint, method))",
+              "instant": true,
+              "legendFormat": "{{endpoint}} [{{method}}]",
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {"id": "labelsToFields", "options": {"mode": "columns"}},
+            {"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true}, "renameByName": {}}}
+          ]
+        },
+        {
+          "id": 32,
+          "type": "timeseries",
+          "title": "Inventory Service — Request Rate by Endpoint",
+          "gridPos": {"x": 0, "y": 60, "w": 12, "h": 9},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(inventory_requests_total[5m])) by (endpoint)",
+              "legendFormat": "{{endpoint}}"
+            }
+          ]
+        },
+        {
+          "id": 33,
+          "type": "timeseries",
+          "title": "Inventory Service — Error Rate by Endpoint",
+          "gridPos": {"x": 12, "y": 60, "w": 12, "h": 9},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 0.01},
+                  {"color": "red", "value": 0.05}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(inventory_requests_total{status=~\"5..\"}[5m])) by (endpoint) / sum(rate(inventory_requests_total[5m])) by (endpoint)",
+              "legendFormat": "{{endpoint}}"
+            }
+          ]
+        },
+        {
+          "id": 34,
+          "type": "stat",
+          "title": "Total Inventory Items",
+          "gridPos": {"x": 0, "y": 69, "w": 12, "h": 5},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null}
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "inventory_items_total",
+              "instant": true,
+              "legendFormat": "Total Items"
+            }
+          ]
+        },
+        {
+          "id": 35,
+          "type": "stat",
+          "title": "Low Stock Items",
+          "gridPos": {"x": 12, "y": 69, "w": 12, "h": 5},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 5},
+                  {"color": "red", "value": 10}
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "inventory_low_stock_items",
+              "instant": true,
+              "legendFormat": "Low Stock Items"
+            }
+          ]
+        },
+        {
+          "id": 36,
+          "type": "timeseries",
+          "title": "Inventory Service — P95 Latency by Endpoint",
+          "gridPos": {"x": 0, "y": 74, "w": 24, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 0.3},
+                  {"color": "red", "value": 0.5}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "histogram_quantile(0.95, sum(rate(inventory_request_duration_secs_bucket[5m])) by (le, endpoint))",
+              "legendFormat": "{{endpoint}} P95"
+            }
+          ]
+        }
+      ]
+    }

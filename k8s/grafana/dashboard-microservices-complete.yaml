@@ -1,0 +1,660 @@
+---
+# Microservices Complete Overview Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-microservices-complete
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "IntelliOps"
+data:
+  complete-microservices.json: |
+    {
+      "id": null,
+      "uid": "intelliops-microservices-complete",
+      "title": "Microservices Complete Overview",
+      "tags": ["intelliops", "microservices", "overview"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "30s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {
+          "id": 1,
+          "type": "row",
+          "title": "Health Overview",
+          "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Order Service Availability",
+          "gridPos": {"x": 0, "y": 1, "w": 8, "h": 5},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "decimals": 4,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "orange", "value": 0.99},
+                  {"color": "green", "value": 0.999}
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "slo:order_service:availability_rate1h or vector(0.999)",
+              "instant": true,
+              "legendFormat": "Order Service"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Payment Service Availability",
+          "gridPos": {"x": 8, "y": 1, "w": 8, "h": 5},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "decimals": 4,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "orange", "value": 0.99},
+                  {"color": "green", "value": 0.999}
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "slo:payment_service:availability_rate1h or vector(0.999)",
+              "instant": true,
+              "legendFormat": "Payment Service"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Inventory Service Availability",
+          "gridPos": {"x": 16, "y": 1, "w": 8, "h": 5},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "decimals": 4,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "orange", "value": 0.99},
+                  {"color": "green", "value": 0.999}
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "slo:inventory_service:availability_rate1h or vector(0.999)",
+              "instant": true,
+              "legendFormat": "Inventory Service"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "type": "row",
+          "title": "Request Rate",
+          "gridPos": {"x": 0, "y": 6, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "Request Rate — All Services",
+          "gridPos": {"x": 0, "y": 7, "w": 24, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(order_requests_total[2m]))",
+              "legendFormat": "Orders"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(payment_requests_total[2m]))",
+              "legendFormat": "Payments"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(inventory_requests_total[2m]))",
+              "legendFormat": "Inventory"
+            }
+          ]
+        },
+        {
+          "id": 20,
+          "type": "row",
+          "title": "Error Rate %",
+          "gridPos": {"x": 0, "y": 15, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 21,
+          "type": "timeseries",
+          "title": "Error Rate % — All Services",
+          "gridPos": {"x": 0, "y": 16, "w": 24, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 1},
+                  {"color": "red", "value": 5}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(order_requests_total{status=~\"5..\"}[2m])) / sum(rate(order_requests_total[2m])) * 100",
+              "legendFormat": "Order Error %"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(payment_requests_total{status=~\"5..\"}[2m])) / sum(rate(payment_requests_total[2m])) * 100",
+              "legendFormat": "Payment Error %"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(inventory_requests_total{status=~\"5..\"}[2m])) / sum(rate(inventory_requests_total[2m])) * 100",
+              "legendFormat": "Inventory Error %"
+            }
+          ]
+        },
+        {
+          "id": 30,
+          "type": "row",
+          "title": "P95 Latency",
+          "gridPos": {"x": 0, "y": 24, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 31,
+          "type": "timeseries",
+          "title": "P95 Latency — All Services",
+          "gridPos": {"x": 0, "y": 25, "w": 24, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "histogram_quantile(0.95, sum(rate(order_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "Order P95"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "histogram_quantile(0.95, sum(rate(payment_request_duration_secs_bucket[5m])) by (le))",
+              "legendFormat": "Payment P95"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "histogram_quantile(0.95, sum(rate(inventory_request_duration_secs_bucket[5m])) by (le))",
+              "legendFormat": "Inventory P95"
+            }
+          ]
+        },
+        {
+          "id": 40,
+          "type": "row",
+          "title": "Business Metrics",
+          "gridPos": {"x": 0, "y": 33, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 41,
+          "type": "stat",
+          "title": "Active Orders",
+          "gridPos": {"x": 0, "y": 34, "w": 8, "h": 5},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 50},
+                  {"color": "red", "value": 100}
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "orders_active_total",
+              "instant": true,
+              "legendFormat": "Active Orders"
+            }
+          ]
+        },
+        {
+          "id": 42,
+          "type": "timeseries",
+          "title": "Orders Created Rate (per minute)",
+          "gridPos": {"x": 8, "y": 34, "w": 16, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "rate(orders_created_total{status=\"success\"}[2m]) * 60",
+              "legendFormat": "Successful Orders/min"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "rate(orders_created_total{status=\"failed\"}[2m]) * 60",
+              "legendFormat": "Failed Orders/min"
+            }
+          ]
+        },
+        {
+          "id": 50,
+          "type": "row",
+          "title": "Order Service Details",
+          "gridPos": {"x": 0, "y": 42, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 51,
+          "type": "timeseries",
+          "title": "DB Query P95 Latency",
+          "gridPos": {"x": 0, "y": 43, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "DB P95 Latency"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "histogram_quantile(0.50, sum(rate(db_query_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "DB P50 Latency"
+            }
+          ]
+        },
+        {
+          "id": 52,
+          "type": "timeseries",
+          "title": "Order Errors by Type",
+          "gridPos": {"x": 12, "y": 43, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(order_errors_total[5m])) by (error_type)",
+              "legendFormat": "{{error_type}}"
+            }
+          ]
+        },
+        {
+          "id": 60,
+          "type": "row",
+          "title": "Inventory Details",
+          "gridPos": {"x": 0, "y": 51, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 61,
+          "type": "stat",
+          "title": "Total Inventory Items",
+          "gridPos": {"x": 0, "y": 52, "w": 8, "h": 5},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null}
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "inventory_items_total",
+              "instant": true,
+              "legendFormat": "Total Items"
+            }
+          ]
+        },
+        {
+          "id": 62,
+          "type": "stat",
+          "title": "Low Stock Items",
+          "gridPos": {"x": 8, "y": 52, "w": 8, "h": 5},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 5},
+                  {"color": "red", "value": 10}
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "inventory_low_stock_items",
+              "instant": true,
+              "legendFormat": "Low Stock Items"
+            }
+          ]
+        },
+        {
+          "id": 63,
+          "type": "timeseries",
+          "title": "Inventory Disk Write Rate",
+          "gridPos": {"x": 16, "y": 52, "w": 8, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "single"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "rate(inventory_disk_bytes_written_total[5m])",
+              "legendFormat": "Disk Write Rate"
+            }
+          ]
+        },
+        {
+          "id": 64,
+          "type": "timeseries",
+          "title": "Inventory Stock & Cache Operations",
+          "gridPos": {"x": 0, "y": 57, "w": 16, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(inventory_stock_ops_total[5m])) by (operation)",
+              "legendFormat": "stock:{{operation}}"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "sum(rate(inventory_cache_ops_total[5m])) by (operation)",
+              "legendFormat": "cache:{{operation}}"
+            }
+          ]
+        },
+        {
+          "id": 70,
+          "type": "row",
+          "title": "Infrastructure",
+          "gridPos": {"x": 0, "y": 65, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "id": 71,
+          "type": "stat",
+          "title": "Order CPU Stress Active",
+          "gridPos": {"x": 0, "y": 66, "w": 8, "h": 5},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": 1}
+                ]
+              },
+              "mappings": [
+                {"type": "value", "options": {"0": {"text": "Inactive"}, "1": {"text": "ACTIVE"}}}
+              ]
+            }
+          },
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "order_cpu_stress_active",
+              "instant": true,
+              "legendFormat": "CPU Stress"
+            }
+          ]
+        },
+        {
+          "id": 72,
+          "type": "timeseries",
+          "title": "Order Memory Leak (MB)",
+          "gridPos": {"x": 8, "y": 66, "w": 16, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decmbytes",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 15,
+                "showPoints": "never",
+                "spanNulls": true
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 50},
+                  {"color": "red", "value": 100}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "single"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "order_memory_leak_bytes / 1024 / 1024",
+              "legendFormat": "Memory Leak (MB)"
+            }
+          ]
+        }
+      ]
+    }

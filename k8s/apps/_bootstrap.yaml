@@ -19,4 +19,4 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: argocd
 data:
-  OTEL_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4317"
+  OTEL_ENDPOINT: "http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317"

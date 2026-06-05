@@ -25,6 +25,7 @@ grafana:
   additionalDataSources:
     - name: Loki
       type: loki
+      uid: Loki
       url: http://loki.monitoring.svc.cluster.local:3100
       access: proxy
       isDefault: false
@@ -35,9 +36,11 @@ grafana:
             matcherRegex: "traceId=(\\w+)"
             name: TraceID
             url: "$${__value.raw}"
+            type: dataLink
     - name: Tempo
       type: tempo
-      url: http://tempo.monitoring.svc.cluster.local:3100
+      uid: Tempo
+      url: http://tempo.monitoring.svc.cluster.local:3200
       access: proxy
       isDefault: false
       jsonData:
@@ -46,6 +49,12 @@ grafana:
           spanStartTimeShift: "-1h"
           spanEndTimeShift: "1h"
           filterByTraceID: true
+        serviceMap:
+          datasourceUid: prometheus
+        nodeGraph:
+          enabled: true
+        search:
+          hide: false
 
 prometheus:
   prometheusSpec:
