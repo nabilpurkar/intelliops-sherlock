@@ -21,13 +21,22 @@ set -euo pipefail
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'
 RED='\033[0;31m'; BOLD='\033[1m'; NC='\033[0m'
 
+START_TIME=$(date +%s)
+
 info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
 success() { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()    { echo -e "${YELLOW}[SKIP]${NC}  $*"; }
-step()    { echo -e "\n${BOLD}${CYAN}══════════════════════════════════════════${NC}";
-            echo -e "${BOLD}${CYAN}  $*${NC}";
-            echo -e "${BOLD}${CYAN}══════════════════════════════════════════${NC}"; }
 die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+step() {
+  local _now _elapsed _mm _ss
+  _now=$(date +%s)
+  _elapsed=$(( _now - START_TIME ))
+  _mm=$(( _elapsed / 60 ))
+  _ss=$(( _elapsed % 60 ))
+  echo -e "\n${BOLD}${CYAN}══════════════════════════════════════════${NC}"
+  echo -e "${BOLD}${CYAN}  $*${NC}  ${YELLOW}[+${_mm}m${_ss}s]${NC}"
+  echo -e "${BOLD}${CYAN}══════════════════════════════════════════${NC}"
+}
 
 # ── Dynamic config — no hardcodes ─────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -157,6 +166,12 @@ info "ALB: ${ALB_HOST}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 0. ECR image bootstrap — build + push if repositories are empty
+#
+# Source priority:
+#   1. services/<svc>/  in this repo (full image from service repo clone)
+#   2. Inline stub Dockerfile — minimal FastAPI stub so pods can start while
+#      service CI pipelines push real images.  Stubs respond to /health, /ready,
+#      /metrics, and all API routes with valid JSON so probes pass.
 # ─────────────────────────────────────────────────────────────────────────────
 step "0/7  ECR image bootstrap"
 
@@ -167,6 +182,43 @@ ecr_has_images() {
     --repository-name "${repo}" \
     --query 'length(imageIds)' --output text 2>/dev/null || echo "0")
   [ "${count}" -gt 0 ]
+}
+
+# Port assignments match k8s/apps/*.yaml containerPort declarations
+declare -A SVC_PORT=( [order-service]=8000 [payment-service]=8002 [inventory-service]=8001 )
+
+# Build a minimal FastAPI stub image for a service, piping the Dockerfile inline.
+# $1 = service name, $2 = port, $3 = full image ref
+build_stub_image() {
+  local svc=$1 port=$2 img=$3
+  info "Building stub image for ${svc} (no services/${svc}/ found locally) ..."
+  docker build -t "${img}" - <<DOCKERFILE
+FROM python:3.12-slim
+RUN pip install --no-cache-dir fastapi uvicorn prometheus-client 2>/dev/null
+RUN useradd -u 1000 -m app
+USER 1000
+WORKDIR /app
+RUN python3 -c "
+import pathlib, textwrap
+pathlib.Path('main.py').write_text(textwrap.dedent('''
+  from fastapi import FastAPI
+  from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+  from starlette.responses import Response
+  app = FastAPI(title=\"${svc} stub\")
+  @app.get(\"/health\")
+  def health(): return {\"status\": \"ok\", \"service\": \"${svc}\"}
+  @app.get(\"/ready\")
+  def ready():  return {\"status\": \"ready\"}
+  @app.get(\"/metrics\")
+  def metrics():
+      return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+  @app.api_route(\"/{path:path}\", methods=[\"GET\",\"POST\",\"PUT\",\"DELETE\",\"PATCH\"])
+  def catch_all(path: str): return {\"stub\": True, \"service\": \"${svc}\", \"path\": path}
+'''))
+"
+EXPOSE ${port}
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${port}"]
+DOCKERFILE
 }
 
 need_bootstrap=false
@@ -186,29 +238,47 @@ if ${need_bootstrap}; then
     || die "Docker ECR login failed"
 
   for svc in "${SERVICES[@]}"; do
-    src_dir="${REPO_ROOT}/services/${svc}"
     img="${REGISTRY}/${ECR_NAMESPACE}/${svc}:latest"
     if ! ecr_has_images "${svc}"; then
-      info "Building ${svc} ..."
-      docker build -t "${img}" "${src_dir}" \
-        || die "Docker build failed for ${svc}"
+      src_dir="${REPO_ROOT}/services/${svc}"
+      if [ -d "${src_dir}" ]; then
+        info "Building ${svc} from ${src_dir} ..."
+        docker build -t "${img}" "${src_dir}" \
+          || die "Docker build failed for ${svc}"
+      else
+        build_stub_image "${svc}" "${SVC_PORT[${svc}]}" "${img}" \
+          || die "Stub build failed for ${svc}"
+      fi
       info "Pushing ${svc} ..."
-      docker push "${img}" \
-        || die "Docker push failed for ${svc}"
+      docker push "${img}" || die "Docker push failed for ${svc}"
       success "${svc} image pushed to ECR"
     fi
   done
 
-  # load-generator
-  load_src="${REPO_ROOT}/services/${LOAD_GEN}"
+  # load-generator — use official locust image as stub if no local source
   load_img="${REGISTRY}/${ECR_NAMESPACE}/${LOAD_GEN}:latest"
   if ! ecr_has_images "${LOAD_GEN}"; then
-    info "Building ${LOAD_GEN} ..."
-    docker build -t "${load_img}" "${load_src}" \
-      || die "Docker build failed for ${LOAD_GEN}"
+    load_src="${REPO_ROOT}/services/${LOAD_GEN}"
+    if [ -d "${load_src}" ]; then
+      info "Building ${LOAD_GEN} from ${load_src} ..."
+      docker build -t "${load_img}" "${load_src}" \
+        || die "Docker build failed for ${LOAD_GEN}"
+    else
+      info "Building ${LOAD_GEN} stub (no services/${LOAD_GEN}/ found locally) ..."
+      docker build -t "${load_img}" - <<'LOCUST_DOCKERFILE'
+FROM locustio/locust:latest
+USER root
+RUN mkdir -p /mnt/locust
+# Minimal locustfile so container starts without crashing
+RUN printf 'from locust import HttpUser, task\nclass S(HttpUser):\n    @task\n    def t(self): self.client.get("/")\n' \
+    > /mnt/locust/locustfile.py
+USER locust
+EXPOSE 8089
+ENTRYPOINT ["locust", "-f", "/mnt/locust/locustfile.py", "--host=http://localhost"]
+LOCUST_DOCKERFILE
+    fi
     info "Pushing ${LOAD_GEN} ..."
-    docker push "${load_img}" \
-      || die "Docker push failed for ${LOAD_GEN}"
+    docker push "${load_img}" || die "Docker push failed for ${LOAD_GEN}"
     success "${LOAD_GEN} image pushed to ECR"
   fi
 
@@ -968,8 +1038,9 @@ success "INSTRUCTIONS.md written → ${INSTRUCTIONS}"
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
+_TOTAL=$(( $(date +%s) - START_TIME ))
 echo -e "${BOLD}${GREEN}════════════════════════════════════════════════════${NC}"
-echo -e "${BOLD}${GREEN}  Configuration complete!${NC}"
+echo -e "${BOLD}${GREEN}  Configuration complete! — total time: $(( _TOTAL / 60 ))m$(( _TOTAL % 60 ))s${NC}"
 echo -e "${BOLD}${GREEN}════════════════════════════════════════════════════${NC}"
 echo ""
 echo -e "  ${CYAN}Apps${NC}        ${APPS_URL}"
