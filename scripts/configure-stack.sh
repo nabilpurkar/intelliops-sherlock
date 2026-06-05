@@ -220,25 +220,8 @@ else
   success "All ECR images present — no bootstrap needed"
 fi
 
-# Scale down locust before waiting — load tests drive HPAs to maxReplicas,
-# exhausting cluster CPU and leaving microservice pods Pending.
-info "Pausing locust load generator to prevent HPA over-scaling ..."
-kubectl scale deployment locust -n locust --replicas=0 2>/dev/null || true
-kubectl patch hpa order-service-hpa     -n apps --type=merge \
-  -p='{"spec":{"maxReplicas":3}}' 2>/dev/null || true
-kubectl patch hpa payment-service-hpa   -n apps --type=merge \
-  -p='{"spec":{"maxReplicas":3}}' 2>/dev/null || true
-kubectl patch hpa inventory-service-hpa -n apps --type=merge \
-  -p='{"spec":{"maxReplicas":3}}' 2>/dev/null || true
-# Remove topology-spread constraints that block scheduling when the only
-# eligible node has insufficient CPU
-for svc in order-service payment-service inventory-service; do
-  kubectl patch deployment "${svc}" -n apps --type=json \
-    -p='[{"op":"remove","path":"/spec/template/spec/topologySpreadConstraints"}]' \
-    2>/dev/null || true
-done
-kubectl scale deployment order-service payment-service inventory-service \
-  -n apps --replicas=2 2>/dev/null || true
+# topology constraints fixed in git (ScheduleAnyway) + HPA maxReplicas=4 in manifests
+# No patches needed here — ArgoCD syncs the correct values from git
 
 # Wait for apps pods to be Running
 info "Waiting for apps pods to be Running ..."

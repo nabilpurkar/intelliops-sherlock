@@ -249,7 +249,6 @@ kubectl wait --for condition=established --timeout=60s \
 
 info "Refreshing kubectl API discovery cache ..."
 kubectl api-resources --api-group=external-secrets.io > /dev/null 2>&1 || true
-sleep 5
 
 info "Applying ClusterSecretStore ..."
 kubectl apply -f "${MANIFESTS}/secret-store.yaml"
@@ -264,10 +263,15 @@ kubectl apply -f "${MANIFESTS}/sonarqube-secret.yaml"
 kubectl apply -f "${MANIFESTS}/defectdojo-secret.yaml"
 kubectl apply -f "${MANIFESTS}/falco-defectdojo-secret.yaml"
 
-info "Waiting 60 s for secrets to sync from AWS Secrets Manager ..."
-sleep 60
-
-info "Checking ExternalSecret status ..."
+info "Waiting for ExternalSecrets to sync (poll up to 3 min) ..."
+for _i in $(seq 1 18); do
+  not_synced=$(kubectl get externalsecret -A --no-headers 2>/dev/null \
+    | grep -cv "True\|SecretSynced" || true)
+  total=$(kubectl get externalsecret -A --no-headers 2>/dev/null | wc -l || echo "0")
+  info "  [${_i}/18] ${not_synced}/${total} secrets not yet synced"
+  [ "${not_synced}" -eq 0 ] && [ "${total}" -gt 0 ] && break
+  sleep 10
+done
 kubectl get externalsecret -A 2>/dev/null || true
 
 # ─── 4. postgresql ────────────────────────────────────────────────────────────
@@ -421,20 +425,8 @@ kubectl apply -f "${REPO_ROOT}/k8s/argocd/locust-app.yaml"
 
 success "ArgoCD Applications registered — they will sync k8s/apps/ and k8s/load-generator/ automatically"
 
-# ── Locust probe fix: load-generator runs headless (no web UI on port 8089).
-# The ArgoCD-synced deployment has an HTTP liveness probe on 8089 which kills
-# the pod ~70s after start (SIGTERM → exit 1 → CrashLoopBackOff).
-# Patch it out here after ArgoCD creates the deployment.
-info "Waiting up to 60s for ArgoCD to sync locust deployment ..."
-for _i in $(seq 1 12); do
-  if kubectl get deployment locust -n locust &>/dev/null 2>&1; then
-    kubectl patch deployment locust -n locust --type=strategic \
-      -p='{"spec":{"template":{"spec":{"containers":[{"name":"locust","livenessProbe":null,"readinessProbe":null}]}}}}' \
-      2>/dev/null && success "Locust HTTP probes removed (headless container)" || true
-    break
-  fi
-  sleep 5
-done
+# Locust probe: removed from git manifest (k8s/load-generator/deployment.yaml)
+# ArgoCD syncs the correct no-probe spec — no post-deploy patch needed
 
 # ─── 17. falco ───────────────────────────────────────────────────────────────
 step "17/22  falco"
@@ -472,15 +464,27 @@ helm_install gatekeeper gatekeeper-system \
   "${CHARTS}/gatekeeper-3.22.2.tgz" \
   -f "${VALUES}/gatekeeper-values.yaml"
 
-info "Waiting 30 s for Gatekeeper webhooks to be ready ..."
-sleep 30
+info "Waiting for Gatekeeper webhook to be ready (poll up to 3 min) ..."
+for _i in $(seq 1 18); do
+  ready=$(kubectl get pods -n gatekeeper-system --no-headers 2>/dev/null \
+    | grep -c "Running" || true)
+  info "  [${_i}/18] Gatekeeper pods Running: ${ready}"
+  [ "${ready}" -ge 2 ] && break
+  sleep 10
+done
 
 info "Applying Gatekeeper ConstraintTemplates ..."
 kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-template.yaml"
 kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-template.yaml"
 
-info "Waiting 10 s for CRDs to be registered ..."
-sleep 10
+info "Waiting for Gatekeeper CRDs to be established ..."
+for _i in $(seq 1 18); do
+  ready=$(kubectl get crd 2>/dev/null \
+    | grep -c "constrainttemplates\|allowedregistries\|requirelabels" || true)
+  info "  [${_i}/18] Gatekeeper CRDs ready: ${ready}"
+  [ "${ready}" -ge 1 ] && break
+  sleep 10
+done
 
 info "Applying Gatekeeper Constraints (warn mode — violations logged, not blocked) ..."
 kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-constraint.yaml"
