@@ -16,6 +16,8 @@ spec:
       namespace: apps
     - server: https://kubernetes.default.svc
       namespace: locust
+    - server: https://kubernetes.default.svc
+      namespace: aiops-demo
 
   clusterResourceWhitelist:
     - group: ""
@@ -32,3 +34,9 @@ spec:
       kind: ConfigMap
     - group: "autoscaling"
       kind: HorizontalPodAutoscaler
+    - group: "batch"
+      kind: CronJob
+    - group: "rbac.authorization.k8s.io"
+      kind: Role
+    - group: "rbac.authorization.k8s.io"
+      kind: RoleBinding

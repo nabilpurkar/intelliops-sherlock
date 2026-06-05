@@ -35,3 +35,11 @@ spec:
         maxDuration: 3m
 
   revisionHistoryLimit: 5
+
+  # Ignore HPA-managed replica count — HPA overrides .spec.replicas at runtime;
+  # ArgoCD must not revert it back to the git value.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas

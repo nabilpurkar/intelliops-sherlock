@@ -458,6 +458,21 @@ helm_install sonarqube sonarqube \
 
 # ─── 19. defectdojo ──────────────────────────────────────────────────────────
 step "19/22  defectdojo"
+
+# Wait for PostgreSQL to be fully accepting connections (not just Running)
+info "Waiting for PostgreSQL to accept connections (poll up to 3 min) ..."
+PG_READY=0
+for _i in $(seq 1 18); do
+  if kubectl exec -n database postgresql-0 -- \
+      env PGPASSWORD="$(kubectl get secret postgresql-credentials -n database -o jsonpath='{.data.postgres-password}' | base64 -d)" \
+      psql -U postgres -c "SELECT 1;" &>/dev/null 2>&1; then
+    PG_READY=1; break
+  fi
+  sleep 10
+done
+[ "${PG_READY}" -eq 1 ] || die "PostgreSQL not ready after 3 min — cannot install DefectDojo"
+success "PostgreSQL is ready"
+
 helm_install defectdojo defectdojo \
   "${CHARTS}/defectdojo" \
   -f "${VALUES}/defectdojo-values.yaml" \
