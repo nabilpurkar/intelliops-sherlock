@@ -1,0 +1,24 @@
+---
+# ServiceMonitor — tells Prometheus to scrape Falco Sidekick metrics
+# Falco Sidekick exposes: falcosecurity_falcosidekick_falco_events_total
+# on port 2801 at /metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: falco-sidekick
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - falco
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: falcosidekick
+      app.kubernetes.io/component: core
+  jobLabel: app.kubernetes.io/name
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

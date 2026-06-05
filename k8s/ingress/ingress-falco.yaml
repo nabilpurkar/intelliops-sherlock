@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: falco
+  namespace: falco
+  annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
+    konghq.com/strip-path: "false"
+spec:
+  ingressClassName: kong
+  rules:
+    - host: falco.infrastructurepath.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: falco-falcosidekick-ui
+                port:
+                  number: 2802

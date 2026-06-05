@@ -425,6 +425,7 @@ kubectl apply -f "${INGRESS}/ingress-apps.yaml"
 kubectl apply -f "${INGRESS}/ingress-locust.yaml"
 kubectl apply -f "${INGRESS}/ingress-kong-admin.yaml"
 kubectl apply -f "${INGRESS}/ingress-defectdojo.yaml"
+kubectl apply -f "${INGRESS}/ingress-falco.yaml"
 
 success "IngressClass and all service ingresses applied"
 
