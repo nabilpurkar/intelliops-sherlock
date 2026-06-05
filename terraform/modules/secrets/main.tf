@@ -32,12 +32,11 @@ resource "null_resource" "clear_pending_secrets" {
       REGION="${data.aws_region.current.region}"
       for name in ${join(" ", local.secret_names)}; do
         SECRET_ID="${var.project}/${var.environment}/$name"
-        DELETED_DATE=$(aws secretsmanager describe-secret \
-          --secret-id "$SECRET_ID" --region "$REGION" \
-          --query DeletedDate --output text 2>/dev/null || echo "NOTFOUND")
-        if [ "$DELETED_DATE" != "NOTFOUND" ] && [ "$DELETED_DATE" != "None" ]; then
-          echo "Clearing pending-deletion secret: $SECRET_ID"
+        if aws secretsmanager describe-secret --secret-id "$SECRET_ID" --region "$REGION" &>/dev/null; then
+          echo "Found existing secret (active or pending-deletion): $SECRET_ID — force-deleting"
+          # restore-secret is a no-op on active secrets (errors suppressed); required for pending-deletion
           aws secretsmanager restore-secret --secret-id "$SECRET_ID" --region "$REGION" 2>/dev/null || true
+          # force-delete works on active secrets; after restore it also works on previously pending ones
           aws secretsmanager delete-secret --secret-id "$SECRET_ID" \
             --force-delete-without-recovery --region "$REGION" 2>/dev/null || true
         fi
