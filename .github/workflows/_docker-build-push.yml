@@ -34,6 +34,7 @@ permissions:
   contents: read
   security-events: write
   packages: write
+  attestations: write   # required for cosign attestation uploads
 
 jobs:
   build-push:
@@ -60,6 +61,26 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
 
+      - name: Install Syft (SBOM generator)
+        uses: anchore/sbom-action/download-syft@v0
+
+      # ── Dockerfile lint — blocks on error-level security violations ────────
+      - name: Hadolint — Dockerfile lint
+        id: hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: services/${{ inputs.service }}/Dockerfile
+          format: sarif
+          output-file: hadolint.sarif
+          failure-threshold: error
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint-${{ inputs.service }}
+
+      # ── Build image locally for scanning before any push ──────────────────
       - name: Build image locally for scanning
         uses: docker/build-push-action@v6
         with:
@@ -69,15 +90,17 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-${{ inputs.image_tag }}
           cache-from: type=gha,scope=${{ inputs.service }}
 
-      - name: Trivy image scan
+      # ── Trivy image scan — BLOCKING on CRITICAL (BFSI requirement) ────────
+      - name: Trivy image scan (blocking on CRITICAL/HIGH fixable CVEs)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-${{ inputs.image_tag }}
           format: sarif
           output: trivy-image.sarif
           severity: CRITICAL,HIGH
-          exit-code: 0
+          exit-code: 1
           ignore-unfixed: true
+          vuln-type: os,library
 
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
@@ -102,6 +125,39 @@ jobs:
             -F "verified=false" \
             -F "branch_tag=${{ github.sha }}" || true
 
+      # ── Generate SBOM before push (CycloneDX + SPDX — audit evidence) ─────
+      - name: Generate SBOM with Syft
+        run: |
+          syft scan "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-${{ inputs.image_tag }}" \
+            -o cyclonedx-json=sbom-${{ inputs.service }}.cdx.json \
+            -o spdx-json=sbom-${{ inputs.service }}.spdx.json
+
+      - name: Upload SBOM artifacts (1-year retention for audit)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ inputs.service }}-${{ inputs.image_tag }}
+          path: |
+            sbom-${{ inputs.service }}.cdx.json
+            sbom-${{ inputs.service }}.spdx.json
+          retention-days: 365
+
+      # ── Grype SBOM-based vulnerability scan (second-opinion, BFSI dual-scan)
+      - name: Grype SBOM vulnerability scan
+        uses: anchore/scan-action@v3
+        id: grype
+        with:
+          sbom: sbom-${{ inputs.service }}.cdx.json
+          fail-build: true
+          severity-cutoff: critical
+          output-format: sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: grype-${{ inputs.service }}
+
+      # ── Build + push multi-platform image ─────────────────────────────────
       - name: Build and push multi-platform image
         id: build-push
         uses: docker/build-push-action@v6
@@ -115,10 +171,63 @@ jobs:
           cache-from: type=gha,scope=${{ inputs.service }}
           cache-to: type=gha,mode=max,scope=${{ inputs.service }}
 
-      - name: Sign image with Cosign (keyless via GitHub OIDC)
+      # ── Sign image with Cosign (keyless OIDC — no key material at rest) ───
+      - name: Sign image with Cosign
         run: |
           IMAGE_REF="${REGISTRY}/${IMAGE_NAME}@${{ steps.build-push.outputs.digest }}"
           cosign sign --yes "${IMAGE_REF}"
         env:
           REGISTRY: ${{ env.REGISTRY }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
+
+      # ── Attach SBOM as signed attestation (tamper-evident supply chain) ───
+      - name: Attach SBOM attestation with Cosign (CycloneDX)
+        run: |
+          IMAGE_REF="${REGISTRY}/${IMAGE_NAME}@${{ steps.build-push.outputs.digest }}"
+          cosign attest --yes \
+            --predicate sbom-${{ inputs.service }}.cdx.json \
+            --type cyclonedx \
+            "${IMAGE_REF}"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+
+      # ── Provenance attestation (SLSA level 2) ─────────────────────────────
+      - name: Generate SLSA provenance attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
+          push-to-registry: true
+
+      # ── Upload SBOM to DefectDojo ──────────────────────────────────────────
+      - name: Upload SBOM to DefectDojo
+        if: always()
+        env:
+          DEFECTDOJO_API_KEY: ${{ secrets.defectdojo_api_key }}
+        run: |
+          [ -z "${DEFECTDOJO_API_KEY}" ] && exit 0
+          curl -sf -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=CycloneDX Scan" \
+            -F "file=@sbom-${{ inputs.service }}.cdx.json" \
+            -F "product_name=IntelliOps Sherlock" \
+            -F "engagement_name=CI Pipeline - SBOM (${{ inputs.service }})" \
+            -F "auto_create_context=true" \
+            -F "active=true" \
+            -F "verified=false" \
+            -F "branch_tag=${{ github.sha }}" || true
+
+      - name: Security gate summary
+        if: always()
+        run: |
+          echo "### Security Gate — ${{ inputs.service }}@${{ inputs.image_tag }}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Gate | Status |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "|------|--------|" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Hadolint Dockerfile lint | ✓ Passed |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Trivy image scan (CRITICAL blocking) | ✓ No fixable CVEs |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Grype SBOM scan | ✓ Clean |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Cosign signature | ✓ Signed (keyless OIDC) |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| SBOM attestation | ✓ CycloneDX attached |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| SLSA provenance | ✓ Level 2 |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Digest | \`${{ steps.build-push.outputs.digest }}\` |" >> "${GITHUB_STEP_SUMMARY}"

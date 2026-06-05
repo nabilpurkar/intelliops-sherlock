@@ -4,10 +4,13 @@ metadata:
   name: disallow-latest-tag
   annotations:
     policies.kyverno.io/title: Disallow Latest Tag
-    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/category: Best Practices / BFSI
     policies.kyverno.io/severity: medium
+    policies.kyverno.io/description: >-
+      Mutable tags like 'latest' break supply chain traceability. Required for
+      SLSA provenance and PCI-DSS 6.3.2 software inventory controls.
 spec:
-  validationFailureAction: Audit
+  validationFailureAction: Enforce
   background: true
   rules:
     - name: require-image-tag

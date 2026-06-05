@@ -21,3 +21,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "dockerhub_secret_arn" {
+  description = "ARN of Secrets Manager secret with Docker Hub credentials for ECR pull-through cache. Set to empty string to disable Docker Hub cache rule."
+  type        = string
+  default     = ""
+}

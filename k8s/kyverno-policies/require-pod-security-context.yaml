@@ -1,0 +1,66 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-pod-security-context
+  annotations:
+    policies.kyverno.io/title: Require Pod Security Context
+    policies.kyverno.io/category: Pod Security / BFSI
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      All containers in the apps namespace must set readOnlyRootFilesystem and
+      disallow privilege escalation. Required for PCI-DSS 6.3 and RBI IT Security
+      hardening baseline.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-readonly-root-filesystem
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces:
+                - apps
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - falco
+                - cert-manager
+                - linkerd
+                - linkerd-cni
+      validate:
+        message: "containers must set securityContext.readOnlyRootFilesystem: true"
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+
+    - name: disallow-privilege-escalation
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces:
+                - apps
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - falco
+                - cert-manager
+                - linkerd
+                - linkerd-cni
+      validate:
+        message: "containers must set securityContext.allowPrivilegeEscalation: false"
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: false
+            =(initContainers):
+              - securityContext:
+                  allowPrivilegeEscalation: false

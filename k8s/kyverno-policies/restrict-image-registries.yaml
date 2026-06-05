@@ -4,10 +4,13 @@ metadata:
   name: restrict-image-registries
   annotations:
     policies.kyverno.io/title: Restrict Image Registries
-    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/category: Supply Chain Security / BFSI
     policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Only ECR-hosted images (scanned, signed, SBOM-attested) may run in apps
+      namespace. Prevents typosquatting and enforces PCI-DSS 6.3.3 integrity controls.
 spec:
-  validationFailureAction: Audit
+  validationFailureAction: Enforce
   background: true
   rules:
     - name: ecr-only

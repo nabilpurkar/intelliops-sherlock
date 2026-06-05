@@ -4,10 +4,13 @@ metadata:
   name: require-resource-limits
   annotations:
     policies.kyverno.io/title: Require Resource Limits
-    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/category: Best Practices / BFSI
     policies.kyverno.io/severity: medium
+    policies.kyverno.io/description: >-
+      Resource limits prevent noisy-neighbour DoS — required for RBI IT Security
+      Framework availability controls and multi-tenant cluster stability.
 spec:
-  validationFailureAction: Audit
+  validationFailureAction: Enforce
   background: true
   rules:
     - name: require-limits

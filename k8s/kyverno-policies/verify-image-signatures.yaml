@@ -1,0 +1,38 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify Image Signatures
+    policies.kyverno.io/category: Supply Chain Security / BFSI
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/description: >-
+      All application container images must be signed with Cosign keyless OIDC
+      signatures before admission. Enforces SLSA provenance and PCI-DSS 6.3.3
+      software integrity controls. Images without a valid Cosign signature are
+      rejected at admission time.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: verify-cosign-signature
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces:
+                - apps
+      verifyImages:
+        - imageReferences:
+            - "007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    subject: "https://github.com/InfrastructurePath/intelliops-sherlock/.github/workflows/*"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+          mutateDigest: true
+          verifyDigest: true
+          required: true

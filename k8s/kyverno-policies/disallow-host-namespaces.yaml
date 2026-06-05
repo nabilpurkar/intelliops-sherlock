@@ -1,19 +1,20 @@
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
-  name: disallow-privileged-containers
+  name: disallow-host-namespaces
   annotations:
-    policies.kyverno.io/title: Disallow Privileged Containers
+    policies.kyverno.io/title: Disallow Host Namespaces
     policies.kyverno.io/category: Pod Security / BFSI
     policies.kyverno.io/severity: high
     policies.kyverno.io/description: >-
-      Privileged containers have full host access and must never run in
-      production. Required for PCI-DSS 6.3 and RBI IT Security guidelines.
+      Pods must not use hostNetwork, hostPID, or hostIPC — these break container
+      isolation and expose the host network stack. Required for PCI-DSS 6.3 and
+      RBI IT Security Framework network segmentation controls.
 spec:
   validationFailureAction: Enforce
   background: true
   rules:
-    - name: disallow-privileged
+    - name: disallow-host-namespaces
       match:
         any:
           - resources:
@@ -28,12 +29,9 @@ spec:
                 - linkerd
                 - linkerd-cni
       validate:
-        message: "Privileged containers are not allowed. Remove securityContext.privileged: true."
+        message: "hostNetwork, hostPID, and hostIPC must not be enabled."
         pattern:
           spec:
-            containers:
-              - =(securityContext):
-                  =(privileged): false
-            =(initContainers):
-              - =(securityContext):
-                  =(privileged): false
+            =(hostNetwork): false
+            =(hostPID): false
+            =(hostIPC): false

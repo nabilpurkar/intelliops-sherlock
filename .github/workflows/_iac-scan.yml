@@ -1,4 +1,4 @@
-name: IaC Scan - Checkov + Infracost
+name: IaC Scan - Checkov + tfsec + Conftest + Infracost
 
 on:
   workflow_call:
@@ -16,48 +16,153 @@ permissions:
   security-events: write
 
 jobs:
+  # ── Checkov — Terraform + Kubernetes manifest scanning (blocking) ──────────
   checkov:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: bridgecrewio/checkov-action@master
+      - name: Checkov — Terraform IaC scan (blocking)
+        uses: bridgecrewio/checkov-action@master
         with:
           directory: terraform
           framework: terraform
           output_format: sarif
-          output_file_path: checkov.sarif
-          soft_fail: true
+          output_file_path: checkov-tf.sarif
+          soft_fail: false           # CHANGED: now blocks pipeline on failures
 
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: checkov.sarif
-          category: checkov
+          sarif_file: checkov-tf.sarif
+          category: checkov-terraform
 
-      - name: Upload to DefectDojo
+      - name: Checkov — Kubernetes manifest scan (blocking)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: k8s
+          framework: kubernetes
+          output_format: sarif
+          output_file_path: checkov-k8s.sarif
+          soft_fail: false
+          skip_check: CKV_K8S_21    # default SA check not applicable with IRSA
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-k8s.sarif
+          category: checkov-kubernetes
+
+      - name: Upload Checkov results to DefectDojo
         if: always()
         env:
           DEFECTDOJO_API_KEY: ${{ secrets.defectdojo_api_key }}
         run: |
           [ -z "${DEFECTDOJO_API_KEY}" ] && exit 0
+          for sarif_file in checkov-tf.sarif checkov-k8s.sarif; do
+            [ -f "${sarif_file}" ] || continue
+            curl -sf -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+              -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+              -F "scan_type=SARIF" \
+              -F "file=@${sarif_file}" \
+              -F "product_name=IntelliOps Sherlock" \
+              -F "engagement_name=CI Pipeline - Checkov" \
+              -F "auto_create_context=true" \
+              -F "active=true" \
+              -F "verified=false" \
+              -F "branch_tag=${{ github.sha }}" || true
+          done
+
+  # ── tfsec — additional Terraform security analysis ─────────────────────────
+  tfsec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: terraform
+          format: sarif
+          sarif_file: tfsec.sarif
+          soft_fail: false
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: tfsec.sarif
+          category: tfsec
+
+      - name: Upload tfsec to DefectDojo
+        if: always()
+        env:
+          DEFECTDOJO_API_KEY: ${{ secrets.defectdojo_api_key }}
+        run: |
+          [ -z "${DEFECTDOJO_API_KEY}" ] && exit 0
+          [ -f tfsec.sarif ] || exit 0
           curl -sf -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
             -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
             -F "scan_type=SARIF" \
-            -F "file=@checkov.sarif" \
+            -F "file=@tfsec.sarif" \
             -F "product_name=IntelliOps Sherlock" \
-            -F "engagement_name=CI Pipeline - Checkov" \
+            -F "engagement_name=CI Pipeline - tfsec" \
             -F "auto_create_context=true" \
             -F "active=true" \
             -F "verified=false" \
             -F "branch_tag=${{ github.sha }}" || true
 
-      - name: Infracost estimate (non-blocking)
+  # ── Conftest — OPA policy tests for Kubernetes manifests ──────────────────
+  conftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install conftest
+        run: |
+          VERSION=$(curl -s https://api.github.com/repos/open-policy-agent/conftest/releases/latest \
+            | grep '"tag_name"' | cut -d'"' -f4 | tr -d 'v')
+          curl -Lo conftest.tar.gz \
+            "https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}/conftest_${VERSION}_Linux_x86_64.tar.gz"
+          tar xzf conftest.tar.gz conftest
+          sudo mv conftest /usr/local/bin/
+
+      - name: Conftest — Kubernetes manifest policy check
+        run: |
+          conftest test k8s/apps/ k8s/deployments/ \
+            --policy policy/conftest/ \
+            --output=json \
+            --all-namespaces 2>&1 | tee conftest-results.json || true
+
+          # Convert to SARIF-compatible summary for job output
+          python3 - <<'PY'
+          import json, sys
+          try:
+              data = json.load(open('conftest-results.json'))
+              failures = [r for r in data if r.get('failures')]
+              if failures:
+                  print(f"::warning::Conftest found {sum(len(r['failures']) for r in failures)} policy violation(s)")
+                  for r in failures:
+                      for f in r['failures']:
+                          print(f"::error file={r.get('filename','')}::{f.get('msg','')}")
+                  sys.exit(1)
+              print("All Conftest policies passed")
+          except Exception:
+              print("Conftest results not parseable — check output above")
+          PY
+
+  # ── Infracost — cost estimation (non-blocking, FinOps visibility) ──────────
+  infracost:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Infracost estimate
         continue-on-error: true
         env:
           INFRACOST_API_KEY: ${{ secrets.infracost_api_key }}
         run: |
-          [ -z "${INFRACOST_API_KEY}" ] && echo "INFRACOST_API_KEY not set — skipping cost estimate" && exit 0
+          [ -z "${INFRACOST_API_KEY}" ] && echo "INFRACOST_API_KEY not set — skipping" && exit 0
 
           curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
           infracost configure set api_key "${INFRACOST_API_KEY}"
