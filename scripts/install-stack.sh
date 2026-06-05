@@ -98,10 +98,23 @@ if ! _sm_has_value "intelliops/dev/postgresql" "postgres_password"; then
   SQ=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
   KG=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
   DJ=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
+  SQ_MON=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)
   _sm_put "intelliops/dev/postgresql" \
-    "{\"postgres_password\":\"${PG}\",\"sonarqube_password\":\"${SQ}\",\"kong_password\":\"${KG}\",\"defectdojo_password\":\"${DJ}\"}"
+    "{\"postgres_password\":\"${PG}\",\"sonarqube_password\":\"${SQ}\",\"kong_password\":\"${KG}\",\"defectdojo_password\":\"${DJ}\",\"sonarqube_monitoring_passcode\":\"${SQ_MON}\"}"
   success "intelliops/dev/postgresql seeded"
 else
+  # Ensure sonarqube_monitoring_passcode exists (added later — backfill if missing)
+  if ! _sm_has_value "intelliops/dev/postgresql" "sonarqube_monitoring_passcode"; then
+    info "Back-filling sonarqube_monitoring_passcode in intelliops/dev/postgresql ..."
+    CURRENT_PG=$(aws secretsmanager get-secret-value \
+      --secret-id intelliops/dev/postgresql --region "${REGION}" \
+      --query SecretString --output text)
+    SQ_MON=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)
+    UPDATED_PG=$(echo "${CURRENT_PG}" | python3 -c \
+      "import sys,json; d=json.load(sys.stdin); d['sonarqube_monitoring_passcode']='${SQ_MON}'; print(json.dumps(d))")
+    _sm_put "intelliops/dev/postgresql" "${UPDATED_PG}"
+    success "sonarqube_monitoring_passcode back-filled"
+  fi
   info "intelliops/dev/postgresql — already has values"
 fi
 
