@@ -37,6 +37,11 @@ spec:
         - name: order-service
           image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/order-service:88144e2d1d5da985c04fab1e3de5a826ef097700
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
           ports:
             - name: http
               containerPort: 8000
@@ -80,6 +85,12 @@ spec:
               port: 8000
             failureThreshold: 10
             periodSeconds: 5
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname

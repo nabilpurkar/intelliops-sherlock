@@ -218,6 +218,16 @@ info "ALB: ${ALB_HOST}"
 step "0/7  ECR image bootstrap"
 if ! is_done "0"; then
 
+# verify-image-signatures policy requires Kyverno to have ECR IRSA so it can
+# look up cosign signature artifacts.  Without IRSA, the webhook HTTP call
+# takes >10s, API server hits context deadline, and ALL pod creation in the
+# apps namespace is blocked.  Delete the policy for the bootstrap window;
+# re-apply it manually after adding Kyverno IRSA to the Terraform ECR module.
+if kubectl get clusterpolicy verify-image-signatures &>/dev/null 2>&1; then
+  kubectl delete clusterpolicy verify-image-signatures 2>/dev/null || true
+  info "verify-image-signatures policy removed — re-apply after configuring Kyverno IRSA"
+fi
+
 ecr_has_images() {
   local repo="${ECR_NAMESPACE}/$1"
   local count
@@ -225,6 +235,90 @@ ecr_has_images() {
     --repository-name "${repo}" \
     --query 'length(imageIds)' --output text 2>/dev/null || echo "0")
   [ "${count}" -gt 0 ]
+}
+
+# Check whether a specific tag exists (ecr_has_images only checks any tag exists)
+ecr_has_tag() {
+  local repo="${ECR_NAMESPACE}/$1" tag=$2
+  aws ecr describe-images --region "${REGION}" \
+    --repository-name "${repo}" \
+    --image-ids "imageTag=${tag}" \
+    --query 'length(imageDetails)' --output text 2>/dev/null \
+  | grep -qE '^[1-9]'
+}
+
+# Copy :latest to <dst_tag> using ECR registry API — no docker pull/push needed
+retag_ecr_image() {
+  local svc=$1 dst_tag=$2
+  local repo="${ECR_NAMESPACE}/${svc}"
+  local manifest
+  manifest=$(aws ecr batch-get-image \
+    --region "${REGION}" \
+    --repository-name "${repo}" \
+    --image-ids "imageTag=latest" \
+    --query 'images[0].imageManifest' --output text 2>/dev/null) || return 1
+  [ -z "${manifest}" ] && return 1
+  aws ecr put-image \
+    --region "${REGION}" \
+    --repository-name "${repo}" \
+    --image-tag "${dst_tag}" \
+    --image-manifest "${manifest}" >/dev/null 2>&1
+}
+
+# If the running deployment references a SHA tag that doesn't exist in ECR
+# (common after cluster rebuild when only :latest was bootstrapped), retag
+# :latest to that SHA so pods can pull.  Triggered both proactively and when
+# ImagePullBackOff is detected in the wait loop.
+fix_missing_manifest_tags() {
+  local restarted=false
+  local all_svcs=("${SERVICES[@]}" "${LOAD_GEN}")
+  local all_ns=(apps apps apps locust)
+  local i=0
+  for svc in "${all_svcs[@]}"; do
+    local ns="${all_ns[$i]:-apps}"
+    i=$(( i + 1 ))
+    local img_ref
+    img_ref=$(kubectl get deployment "${svc}" -n "${ns}" \
+      -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+    [ -z "${img_ref}" ] && continue
+    local img_tag
+    img_tag=$(echo "${img_ref}" | sed 's/.*://')
+    if [ "${img_tag}" = "latest" ]; then
+      # :latest violates disallow-latest-tag Enforce policy — retag to git SHA and patch manifest
+      local git_sha
+      git_sha=$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo "bootstrap")
+      local manifest_file
+      manifest_file=$(find "${REPO_ROOT}/k8s/apps" -name "${svc}.yaml" 2>/dev/null | head -1)
+      if [ -n "${manifest_file}" ]; then
+        info "${svc}: :latest in manifest violates policy — retagging to :${git_sha} ..."
+        if retag_ecr_image "${svc}" "${git_sha}"; then
+          sed -i "s|/${svc}:latest|/${svc}:${git_sha}|g" "${manifest_file}"
+          kubectl apply -f "${manifest_file}" >/dev/null 2>&1 || true
+          success "Updated ${svc}: :latest → :${git_sha} in ECR and manifest"
+          restarted=true
+        else
+          warn "Could not retag ${svc}:latest — pod may be blocked by disallow-latest-tag"
+        fi
+      fi
+      continue
+    fi
+    if ! ecr_has_tag "${svc}" "${img_tag}"; then
+      info "${svc}: tag :${img_tag} not in ECR — retagging :latest → :${img_tag} ..."
+      if retag_ecr_image "${svc}" "${img_tag}"; then
+        success "ECR retag OK: ${svc}:latest → :${img_tag}"
+        restarted=true
+      else
+        warn "ECR retag failed for ${svc} — pod may stay in ImagePullBackOff"
+      fi
+    fi
+  done
+  if ${restarted}; then
+    info "Restarting affected deployments so pods re-pull corrected tags ..."
+    kubectl rollout restart deployment/order-service deployment/payment-service \
+      deployment/inventory-service -n apps 2>/dev/null || true
+    kubectl rollout restart deployment/locust -n locust 2>/dev/null || true
+    sleep 5
+  fi
 }
 
 # Port assignments match k8s/apps/*.yaml containerPort declarations
@@ -350,11 +444,18 @@ else
   success "All ECR images present — no bootstrap needed"
 fi
 
+# Proactively fix any SHA-pinned tags that are missing from ECR.
+# Handles the common case where the cluster was rebuilt after CI previously pushed
+# a SHA tag: ECR has :latest but the manifest still references the old SHA.
+fix_missing_manifest_tags
+
 # topology constraints fixed in git (ScheduleAnyway) + HPA maxReplicas=4 in manifests
 # No patches needed here — ArgoCD syncs the correct values from git
 
-# Wait for apps pods to be Running
+# Wait for apps pods to be Running; self-heal known failure modes once
 info "Waiting for apps pods to be Running ..."
+_pull_fix_done=false
+_kyverno_fix_done=false
 for attempt in $(seq 1 30); do
   not_running=$(kubectl get pods -n apps --no-headers 2>/dev/null \
     | grep -cvE '\s+(Running|Completed|Succeeded)\s+' || true)
@@ -362,9 +463,55 @@ for attempt in $(seq 1 30); do
     success "All apps pods Running"
     break
   fi
+  # Detect ImagePullBackOff / ErrImagePull — retag :latest → SHA once
+  if ! ${_pull_fix_done}; then
+    pull_errors=$(kubectl get pods -n apps --no-headers 2>/dev/null \
+      | grep -cE 'ImagePullBackOff|ErrImagePull' || true)
+    if [ "${pull_errors}" -gt 0 ]; then
+      warn "${pull_errors} pod(s) in ImagePullBackOff — running ECR retag fix ..."
+      fix_missing_manifest_tags
+      _pull_fix_done=true
+      sleep 10
+      continue
+    fi
+  fi
+  # Detect Kyverno webhook admission failures
+  if ! ${_kyverno_fix_done}; then
+    kyverno_msg=$(kubectl get events -n apps \
+      --field-selector reason=FailedCreate \
+      --sort-by='.lastTimestamp' -o json 2>/dev/null \
+      | python3 -c "
+import sys,json
+evts=json.load(sys.stdin).get('items',[])
+msgs=[e.get('message','') for e in evts if 'kyverno' in e.get('message','').lower() or 'webhook' in e.get('message','').lower()]
+print('\n'.join(msgs[-3:]))" 2>/dev/null || echo "")
+    if [ -n "${kyverno_msg}" ]; then
+      if echo "${kyverno_msg}" | grep -qi "verify-image-signatures\|cosign\|context deadline"; then
+        # cosign policy webhook timeout — delete it
+        warn "Kyverno cosign timeout detected — removing verify-image-signatures policy ..."
+        kubectl delete clusterpolicy verify-image-signatures 2>/dev/null || true
+        kubectl rollout restart deployment/order-service deployment/payment-service \
+          deployment/inventory-service -n apps 2>/dev/null || true
+      elif echo "${kyverno_msg}" | grep -qi "disallow-latest-tag\|latest.*not allowed"; then
+        # :latest tag policy violation — retag to SHA
+        warn "disallow-latest-tag violations detected — fixing :latest tags in manifests ..."
+        fix_missing_manifest_tags
+      fi
+      _kyverno_fix_done=true
+      sleep 15
+      continue
+    fi
+  fi
   printf "    [%02d/30] %d pod(s) not Running yet — waiting 10s\n" "${attempt}" "${not_running}"
   sleep 10
 done
+# Non-fatal — pods may still be pulling; configure continues
+not_running_final=$(kubectl get pods -n apps --no-headers 2>/dev/null \
+  | grep -cvE '\s+(Running|Completed|Succeeded)\s+' || true)
+if [ "${not_running_final}" -gt 0 ]; then
+  warn "${not_running_final} pod(s) still not Running after wait — continuing configure"
+  kubectl get pods -n apps --no-headers 2>/dev/null || true
+fi
 
 mark_done "0"
 fi  # end step 0

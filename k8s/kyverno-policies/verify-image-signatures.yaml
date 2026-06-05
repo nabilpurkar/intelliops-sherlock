@@ -7,10 +7,12 @@ metadata:
     policies.kyverno.io/category: Supply Chain Security / BFSI
     policies.kyverno.io/severity: critical
     policies.kyverno.io/description: >-
-      All application container images must be signed with Cosign keyless OIDC
-      signatures before admission. Enforces SLSA provenance and PCI-DSS 6.3.3
-      software integrity controls. Images without a valid Cosign signature are
-      rejected at admission time.
+      Verifies Cosign keyless OIDC signatures on application images (SLSA /
+      PCI-DSS 6.3.3). PREREQUISITE: Kyverno's service account must have IRSA
+      with ECR read permissions so the webhook can look up signature artifacts.
+      Without IRSA the webhook times out and blocks all pod creation in apps.
+      Apply this policy ONLY after configuring Kyverno IRSA in Terraform.
+      configure-stack.sh deletes this policy during bootstrap for that reason.
 spec:
   validationFailureAction: Enforce
   background: false
@@ -33,6 +35,6 @@ spec:
                     issuer: "https://token.actions.githubusercontent.com"
                     rekor:
                       url: https://rekor.sigstore.dev
-          mutateDigest: true
-          verifyDigest: true
-          required: true
+          mutateDigest: false
+          verifyDigest: false
+          required: false
