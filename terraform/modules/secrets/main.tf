@@ -33,12 +33,22 @@ resource "null_resource" "clear_pending_secrets" {
       for name in ${join(" ", local.secret_names)}; do
         SECRET_ID="${var.project}/${var.environment}/$name"
         if aws secretsmanager describe-secret --secret-id "$SECRET_ID" --region "$REGION" &>/dev/null; then
-          echo "Found existing secret (active or pending-deletion): $SECRET_ID — force-deleting"
-          # restore-secret is a no-op on active secrets (errors suppressed); required for pending-deletion
+          echo "Found existing secret: $SECRET_ID — force-deleting"
           aws secretsmanager restore-secret --secret-id "$SECRET_ID" --region "$REGION" 2>/dev/null || true
-          # force-delete works on active secrets; after restore it also works on previously pending ones
           aws secretsmanager delete-secret --secret-id "$SECRET_ID" \
             --force-delete-without-recovery --region "$REGION" 2>/dev/null || true
+          # Poll until AWS confirms the name is gone (propagation can take a few seconds)
+          WAITED=0
+          while aws secretsmanager describe-secret --secret-id "$SECRET_ID" --region "$REGION" &>/dev/null; do
+            if [ "$WAITED" -ge 30 ]; then
+              echo "Timed out waiting for $SECRET_ID deletion — continuing anyway"
+              break
+            fi
+            echo "Waiting for $SECRET_ID to be fully removed..."
+            sleep 3
+            WAITED=$((WAITED + 3))
+          done
+          echo "Secret cleared: $SECRET_ID"
         fi
       done
     EOT
