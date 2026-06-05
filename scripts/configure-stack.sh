@@ -84,6 +84,7 @@ KONG_ADMIN_URL="https://kong-admin.${DOMAIN}"
 
 SERVICES=(order-service payment-service inventory-service)
 LOAD_GEN=load-generator
+AIOPS_SERVICES=(ai-agent alert-correlator anomaly-detector forecaster)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -442,6 +443,105 @@ LOCUST_DOCKERFILE
   kubectl rollout restart deployment/locust -n locust 2>/dev/null || true
 else
   success "All ECR images present — no bootstrap needed"
+fi
+
+# ── AIOps service bootstrap ──────────────────────────────────────────────────
+# Build + push stub images for aiops-demo services if their ECR repos are empty.
+# These services use the same FastAPI stub pattern; ai-agent is a worker loop.
+_aiops_need_auth=false
+for svc in "${AIOPS_SERVICES[@]}"; do
+  if ! ecr_has_images "${svc}"; then
+    _aiops_need_auth=true
+    info "ECR ${ECR_NAMESPACE}/${svc} — no images found"
+  else
+    info "ECR ${ECR_NAMESPACE}/${svc} — images present, skipping build"
+  fi
+done
+
+if ${_aiops_need_auth}; then
+  # Ensure Docker is authenticated (may already be from above)
+  aws ecr get-login-password --region "${REGION}" \
+    | docker login --username AWS --password-stdin "${REGISTRY}" 2>/dev/null || true
+
+  for svc in alert-correlator anomaly-detector forecaster; do
+    if ecr_has_images "${svc}"; then continue; fi
+    info "Building aiops stub for ${svc} ..."
+    local _td
+    _td=$(mktemp -d)
+    cat > "${_td}/train.py" << 'PYEOF'
+import sys, os, pathlib
+model_dir = os.environ.get("MODEL_DIR", os.environ.get("MODEL_PATH", "/tmp/models"))
+pathlib.Path(model_dir).mkdir(parents=True, exist_ok=True)
+open(f"{model_dir}/stub.pkl", "w").close()
+print("Stub training complete")
+sys.exit(0)
+PYEOF
+    cat > "${_td}/main.py" << 'PYEOF'
+from fastapi import FastAPI
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from starlette.responses import Response
+app = FastAPI()
+@app.get("/healthz")
+@app.get("/health")
+def health(): return {"status": "ok"}
+@app.get("/ready")
+def ready(): return {"status": "ready"}
+@app.get("/metrics")
+def metrics(): return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+@app.api_route("/{path:path}", methods=["GET","POST","PUT","DELETE","PATCH"])
+def catch_all(path: str): return {"stub": True, "path": path}
+PYEOF
+    cat > "${_td}/Dockerfile" << 'DFEOF'
+FROM python:3.12-slim
+RUN pip install --no-cache-dir fastapi uvicorn prometheus-client
+RUN useradd -u 1000 -m app
+USER 1000
+WORKDIR /app
+COPY train.py main.py .
+EXPOSE 8080
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+DFEOF
+    docker build -t "${REGISTRY}/${ECR_NAMESPACE}/${svc}:latest" "${_td}" \
+      || die "Stub build failed for ${svc}"
+    docker push "${REGISTRY}/${ECR_NAMESPACE}/${svc}:latest" \
+      || die "Push failed for ${svc}"
+    success "${svc} stub pushed to ECR"
+    rm -rf "${_td}"
+  done
+
+  if ! ecr_has_images "ai-agent"; then
+    info "Building ai-agent stub (worker loop) ..."
+    local _td
+    _td=$(mktemp -d)
+    cat > "${_td}/main.py" << 'PYEOF'
+import time, os, logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("ai-agent-stub")
+log.info("ai-agent stub — no-op worker")
+poll = int(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
+while True:
+    log.info("stub poll tick (interval=%ds)", poll)
+    time.sleep(poll)
+PYEOF
+    cat > "${_td}/Dockerfile" << 'DFEOF'
+FROM python:3.12-slim
+RUN useradd -u 1000 -m app
+USER 1000
+WORKDIR /app
+COPY main.py .
+CMD ["python3", "main.py"]
+DFEOF
+    docker build -t "${REGISTRY}/${ECR_NAMESPACE}/ai-agent:latest" "${_td}" \
+      || die "Stub build failed for ai-agent"
+    docker push "${REGISTRY}/${ECR_NAMESPACE}/ai-agent:latest" \
+      || die "Push failed for ai-agent"
+    success "ai-agent stub pushed to ECR"
+    rm -rf "${_td}"
+  fi
+
+  info "Restarting aiops-demo deployments to pull fresh images ..."
+  kubectl rollout restart deployment/ai-agent deployment/alert-correlator \
+    deployment/anomaly-detector deployment/forecaster -n aiops-demo 2>/dev/null || true
 fi
 
 # Proactively fix any SHA-pinned tags that are missing from ECR.
