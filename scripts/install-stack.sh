@@ -9,13 +9,22 @@ RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+START_TIME=$(date +%s)
+
 info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
 success() { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()    { echo -e "${YELLOW}[SKIP]${NC}  $*"; }
-step()    { echo -e "\n${BOLD}${CYAN}══════════════════════════════════════════${NC}"; \
-            echo -e "${BOLD}${CYAN}  $*${NC}"; \
-            echo -e "${BOLD}${CYAN}══════════════════════════════════════════${NC}"; }
 die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+step() {
+  local _now _elapsed _mm _ss
+  _now=$(date +%s)
+  _elapsed=$(( _now - START_TIME ))
+  _mm=$(( _elapsed / 60 ))
+  _ss=$(( _elapsed % 60 ))
+  echo -e "\n${BOLD}${CYAN}══════════════════════════════════════════${NC}"
+  echo -e "${BOLD}${CYAN}  $*${NC}  ${YELLOW}[+${_mm}m${_ss}s]${NC}"
+  echo -e "${BOLD}${CYAN}══════════════════════════════════════════${NC}"
+}
 
 # ─── Repo root ────────────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -61,7 +70,7 @@ info "Values dir : ${VALUES}"
 # Terraform creates SM secret containers with NO values. ESO will fail to sync
 # any ExternalSecret, and pods that mount those k8s Secrets won't start.
 # This step seeds every secret that is still empty before anything else runs.
-step "0/N  Bootstrap AWS Secrets Manager secrets"
+step "0/28  Bootstrap AWS Secrets Manager secrets"
 
 REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
 
@@ -242,20 +251,20 @@ for ns in cert-manager external-secrets linkerd database monitoring argocd kong 
 done
 
 # ─── 1. cert-manager ──────────────────────────────────────────────────────────
-step "1/19  cert-manager"
+step "1/28  cert-manager"
 helm_install cert-manager cert-manager \
   "${CHARTS}/cert-manager" \
   -f "${VALUES}/cert-manager-values.yaml" \
   --set installCRDs=true
 
 # ─── 2. external-secrets ──────────────────────────────────────────────────────
-step "2/19  external-secrets"
+step "2/28  external-secrets"
 helm_install external-secrets external-secrets \
   "${CHARTS}/external-secrets" \
   -f "${VALUES}/external-secrets-values.yaml"
 
 # ─── 3. ExternalSecret manifests + wait for sync ─────────────────────────────
-step "3/19  Apply ExternalSecret manifests"
+step "3/28  Apply ExternalSecret manifests"
 
 info "Waiting for ESO CRDs to be established ..."
 kubectl wait --for condition=established --timeout=60s \
@@ -290,13 +299,13 @@ done
 kubectl get externalsecret -A 2>/dev/null || true
 
 # ─── 4. postgresql ────────────────────────────────────────────────────────────
-step "4/19  postgresql"
+step "4/28  postgresql"
 helm_install postgresql database \
   "${CHARTS}/postgresql" \
   -f "${VALUES}/postgresql-values.yaml"
 
 # ─── 5. aws-load-balancer-controller ─────────────────────────────────────────
-step "5/19  aws-load-balancer-controller"
+step "5/28  aws-load-balancer-controller"
 
 # Resolve VPC ID at runtime — avoids hardcoding a value that changes on recreate.
 # IMDS hop limit is 1 (pods can't reach it), so the controller can't auto-discover.
@@ -312,32 +321,32 @@ helm_install aws-load-balancer-controller kube-system \
   --set vpcId="${ALB_VPC_ID}"
 
 # ─── 6. metrics-server ───────────────────────────────────────────────────────
-step "6/19  metrics-server"
+step "6/28  metrics-server"
 helm_install metrics-server kube-system \
   "${CHARTS}/metrics-server" \
   -f "${VALUES}/metrics-server-values.yaml"
 
 # ─── 7. cluster-autoscaler ───────────────────────────────────────────────────
-step "7/19  cluster-autoscaler"
+step "7/28  cluster-autoscaler"
 helm_install cluster-autoscaler kube-system \
   "${CHARTS}/cluster-autoscaler" \
   -f "${VALUES}/cluster-autoscaler-values.yaml"
 
 # ─── 8. external-dns ─────────────────────────────────────────────────────────
-step "8/19  external-dns"
+step "8/28  external-dns"
 helm_install external-dns external-dns \
   "${CHARTS}/external-dns" \
   -f "${VALUES}/external-dns-values.yaml"
 
 # ─── 9. linkerd-crds ─────────────────────────────────────────────────────────
-step "9/19  linkerd-crds"
+step "9/28  linkerd-crds"
 helm_install linkerd-crds linkerd \
   "${CHARTS}/linkerd-crds"
 
 # ─── 9b. linkerd-identity-issuer secret + trust anchor ───────────────────────
 # Both the issuer cert/key and the trust anchor CA cert are read from SM so
 # nothing is hardcoded in the repo. SM was populated in step 0 above.
-step "9b/19  linkerd-identity-issuer secret"
+step "9b/28  linkerd-identity-issuer secret"
 
 LINKERD_JSON=$(aws secretsmanager get-secret-value \
   --secret-id intelliops/dev/linkerd --region "${REGION}" \
@@ -363,51 +372,51 @@ fi
 
 # ─── 10. linkerd-control-plane ───────────────────────────────────────────────
 # Trust anchor is injected at install time from SM — not hardcoded in values file.
-step "10/19  linkerd-control-plane"
+step "10/28  linkerd-control-plane"
 helm_install linkerd-control-plane linkerd \
   "${CHARTS}/linkerd-control-plane" \
   -f "${VALUES}/linkerd-control-plane-values.yaml" \
   --set-string "identityTrustAnchorsPEM=${LINKERD_CA_CRT}"
 
 # ─── 11. argocd ──────────────────────────────────────────────────────────────
-step "11/19  argocd"
+step "11/28  argocd"
 helm_install argocd argocd \
   "${CHARTS}/argo-cd" \
   -f "${VALUES}/argocd-values.yaml"
 
 # ─── 12. kube-prometheus-stack ───────────────────────────────────────────────
-step "12/19  kube-prometheus-stack"
+step "12/28  kube-prometheus-stack"
 helm_install kube-prometheus-stack monitoring \
   "${CHARTS}/kube-prometheus-stack" \
   -f "${VALUES}/kube-prometheus-values.yaml" \
   --timeout 10m
 
 # ─── 13. loki ────────────────────────────────────────────────────────────────
-step "13/19  loki"
+step "13/28  loki"
 helm_install loki monitoring \
   "${CHARTS}/loki-stack" \
   -f "${VALUES}/loki-values.yaml"
 
 # ─── 14. tempo ───────────────────────────────────────────────────────────────
-step "14/19  tempo"
+step "14/28  tempo"
 helm_install tempo monitoring \
   "${CHARTS}/tempo" \
   -f "${VALUES}/tempo-values.yaml"
 
 # ─── 15. otel-collector ──────────────────────────────────────────────────────
-step "15/19  otel-collector"
+step "15/28  otel-collector"
 helm_install otel-collector monitoring \
   "${CHARTS}/opentelemetry-collector" \
   -f "${VALUES}/otel-collector-values.yaml"
 
 # ─── 16. kong ────────────────────────────────────────────────────────────────
-step "16/19  kong"
+step "16/28  kong"
 helm_install kong kong \
   "${CHARTS}/kong" \
   -f "${VALUES}/kong-values.yaml"
 
 # ─── 16b. Kong IngressClass + ingress routes ─────────────────────────────────
-step "16b/19  Kong IngressClass + service ingresses"
+step "16b/28  Kong IngressClass + service ingresses"
 
 info "Applying Kong IngressClass ..."
 kubectl apply -f "${INGRESS}/kong-ingress-class.yaml"
@@ -430,7 +439,7 @@ kubectl apply -f "${INGRESS}/ingress-falco.yaml"
 success "IngressClass and all service ingresses applied"
 
 # ─── 16c. ArgoCD AppProject + Applications ────────────────────────────────────
-step "16c/19  ArgoCD AppProject + Applications"
+step "16c/28  ArgoCD AppProject + Applications"
 
 info "Applying ArgoCD AppProject ..."
 kubectl apply -f "${REPO_ROOT}/k8s/argocd/project.yaml"
@@ -445,20 +454,20 @@ success "ArgoCD Applications registered — they will sync k8s/apps/ and k8s/loa
 # ArgoCD syncs the correct no-probe spec — no post-deploy patch needed
 
 # ─── 17. falco ───────────────────────────────────────────────────────────────
-step "17/22  falco"
+step "17/28  falco"
 helm_install falco falco \
   "${CHARTS}/falco" \
   -f "${VALUES}/falco-values.yaml"
 
 # ─── 18. sonarqube ───────────────────────────────────────────────────────────
-step "18/22  sonarqube"
+step "18/28  sonarqube"
 helm_install sonarqube sonarqube \
   "${CHARTS}/sonarqube" \
   -f "${VALUES}/sonarqube-values.yaml" \
   --timeout 10m
 
 # ─── 19. defectdojo ──────────────────────────────────────────────────────────
-step "19/22  defectdojo"
+step "19/28  defectdojo"
 
 # Wait for PostgreSQL to be fully accepting connections (not just Running)
 info "Waiting for PostgreSQL to accept connections (poll up to 3 min) ..."
@@ -480,7 +489,7 @@ helm_install defectdojo defectdojo \
   --timeout 15m
 
 # ─── 20. kyverno ─────────────────────────────────────────────────────────────
-step "20/22  kyverno"
+step "20/28  kyverno"
 helm_install kyverno kyverno \
   "${CHARTS}/kyverno-3.8.1.tgz" \
   -f "${VALUES}/kyverno-values.yaml"
@@ -490,7 +499,7 @@ kubectl apply -f "${REPO_ROOT}/k8s/kyverno-policies/"
 success "Kyverno policies applied"
 
 # ─── 21. gatekeeper (OPA) ────────────────────────────────────────────────────
-step "21/22  gatekeeper (OPA)"
+step "21/28  gatekeeper (OPA)"
 helm_install gatekeeper gatekeeper-system \
   "${CHARTS}/gatekeeper-3.22.2.tgz" \
   -f "${VALUES}/gatekeeper-values.yaml"
@@ -523,7 +532,7 @@ kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-constraint.yaml"
 success "Gatekeeper constraints applied"
 
 # ─── 22. Prometheus Pushgateway (DORA metrics receiver) ──────────────────────
-step "22/25  prometheus-pushgateway (DORA metrics)"
+step "22/28  prometheus-pushgateway (DORA metrics)"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
 helm repo update prometheus-community 2>/dev/null || true
 helm_install prometheus-pushgateway monitoring \
@@ -533,7 +542,7 @@ success "Pushgateway installed — CI will push DORA metrics here after each dep
 info "Add secret PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091 to GitHub"
 
 # ─── 23. OpenCost (Kubernetes cost monitoring) ────────────────────────────────
-step "23/25  opencost (FinOps)"
+step "23/28  opencost (FinOps)"
 helm repo add opencost https://opencost.github.io/opencost-helm-chart 2>/dev/null || true
 helm repo update opencost 2>/dev/null || true
 helm_install opencost monitoring \
@@ -542,7 +551,7 @@ helm_install opencost monitoring \
 success "OpenCost installed — cost metrics available in Grafana cost dashboard"
 
 # ─── 24. Application SLOs + Error Budget rules ────────────────────────────────
-step "24/25  SLO recording rules + alerts"
+step "24/28  SLO recording rules + alerts"
 kubectl apply -f "${REPO_ROOT}/k8s/slos/"
 success "PrometheusRule SLOs applied (order/payment/inventory — 99.9% availability SLO)"
 
@@ -669,7 +678,8 @@ success "AIOps workloads applied to namespace aiops-demo"
 info "Populate intelliops/dev/slack → webhook_url in AWS SM to enable Slack notifications"
 info "Models will train on first startup (initContainers) — allow 2–5 min before predictions start"
 
-step "Stack installation complete"
+_TOTAL=$(( $(date +%s) - START_TIME ))
+step "Stack installation complete — total time: $(( _TOTAL / 60 ))m$(( _TOTAL % 60 ))s"
 info "Security tools: Kyverno, OPA Gatekeeper, Falco, SonarQube, DefectDojo"
 info "CI pipeline:    Semgrep, Trivy, Checkov, Gitleaks, OWASP Dep-Check, Cosign, ZAP, Infracost"
 info "Observability:  Prometheus, Grafana, Loki, Tempo, OTEL, OpenCost, Pushgateway"
