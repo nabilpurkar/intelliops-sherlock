@@ -8,6 +8,42 @@ locals {
     },
     var.tags
   )
+
+  secret_names = [
+    "postgresql", "grafana", "argocd", "linkerd",
+    "defectdojo", "backstage", "litmus", "slack", "sonarqube",
+  ]
+}
+
+data "aws_region" "current" {}
+
+# Force-clear any pending-deletion secrets before creating them.
+# Triggered only when environment/project changes (i.e. initial create after destroy).
+# Safe no-op when secrets are active — AWS API calls return without error.
+resource "null_resource" "clear_pending_secrets" {
+  triggers = {
+    env     = var.environment
+    project = var.project
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      REGION="${data.aws_region.current.region}"
+      for name in ${join(" ", local.secret_names)}; do
+        SECRET_ID="${var.project}/${var.environment}/$name"
+        DELETED_DATE=$(aws secretsmanager describe-secret \
+          --secret-id "$SECRET_ID" --region "$REGION" \
+          --query DeletedDate --output text 2>/dev/null || echo "NOTFOUND")
+        if [ "$DELETED_DATE" != "NOTFOUND" ] && [ "$DELETED_DATE" != "None" ]; then
+          echo "Clearing pending-deletion secret: $SECRET_ID"
+          aws secretsmanager restore-secret --secret-id "$SECRET_ID" --region "$REGION" 2>/dev/null || true
+          aws secretsmanager delete-secret --secret-id "$SECRET_ID" \
+            --force-delete-without-recovery --region "$REGION" 2>/dev/null || true
+        fi
+      done
+    EOT
+  }
 }
 
 resource "aws_secretsmanager_secret" "postgresql" {
@@ -18,7 +54,8 @@ resource "aws_secretsmanager_secret" "postgresql" {
   recovery_window_in_days = var.recovery_window_in_days
   kms_key_id              = var.kms_key_id
 
-  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/postgresql" })
+  depends_on = [null_resource.clear_pending_secrets]
+  tags       = merge(local.common_tags, { Name = "intelliops/${var.environment}/postgresql" })
 }
 
 resource "aws_secretsmanager_secret" "grafana" {
@@ -29,7 +66,8 @@ resource "aws_secretsmanager_secret" "grafana" {
   recovery_window_in_days = var.recovery_window_in_days
   kms_key_id              = var.kms_key_id
 
-  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/grafana" })
+  depends_on = [null_resource.clear_pending_secrets]
+  tags       = merge(local.common_tags, { Name = "intelliops/${var.environment}/grafana" })
 }
 
 resource "aws_secretsmanager_secret" "argocd" {
@@ -40,7 +78,8 @@ resource "aws_secretsmanager_secret" "argocd" {
   recovery_window_in_days = var.recovery_window_in_days
   kms_key_id              = var.kms_key_id
 
-  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/argocd" })
+  depends_on = [null_resource.clear_pending_secrets]
+  tags       = merge(local.common_tags, { Name = "intelliops/${var.environment}/argocd" })
 }
 
 resource "aws_secretsmanager_secret" "linkerd" {
@@ -51,7 +90,8 @@ resource "aws_secretsmanager_secret" "linkerd" {
   recovery_window_in_days = var.recovery_window_in_days
   kms_key_id              = var.kms_key_id
 
-  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/linkerd" })
+  depends_on = [null_resource.clear_pending_secrets]
+  tags       = merge(local.common_tags, { Name = "intelliops/${var.environment}/linkerd" })
 }
 
 resource "aws_secretsmanager_secret" "defectdojo" {
@@ -62,7 +102,8 @@ resource "aws_secretsmanager_secret" "defectdojo" {
   recovery_window_in_days = var.recovery_window_in_days
   kms_key_id              = var.kms_key_id
 
-  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/defectdojo" })
+  depends_on = [null_resource.clear_pending_secrets]
+  tags       = merge(local.common_tags, { Name = "intelliops/${var.environment}/defectdojo" })
 }
 
 resource "aws_secretsmanager_secret" "backstage" {
@@ -73,7 +114,8 @@ resource "aws_secretsmanager_secret" "backstage" {
   recovery_window_in_days = var.recovery_window_in_days
   kms_key_id              = var.kms_key_id
 
-  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/backstage" })
+  depends_on = [null_resource.clear_pending_secrets]
+  tags       = merge(local.common_tags, { Name = "intelliops/${var.environment}/backstage" })
 }
 
 resource "aws_secretsmanager_secret" "litmus" {
@@ -84,7 +126,8 @@ resource "aws_secretsmanager_secret" "litmus" {
   recovery_window_in_days = var.recovery_window_in_days
   kms_key_id              = var.kms_key_id
 
-  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/litmus" })
+  depends_on = [null_resource.clear_pending_secrets]
+  tags       = merge(local.common_tags, { Name = "intelliops/${var.environment}/litmus" })
 }
 
 resource "aws_secretsmanager_secret" "slack" {
@@ -95,7 +138,8 @@ resource "aws_secretsmanager_secret" "slack" {
   recovery_window_in_days = var.recovery_window_in_days
   kms_key_id              = var.kms_key_id
 
-  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/slack" })
+  depends_on = [null_resource.clear_pending_secrets]
+  tags       = merge(local.common_tags, { Name = "intelliops/${var.environment}/slack" })
 }
 
 resource "aws_secretsmanager_secret" "sonarqube" {
@@ -106,5 +150,6 @@ resource "aws_secretsmanager_secret" "sonarqube" {
   recovery_window_in_days = var.recovery_window_in_days
   kms_key_id              = var.kms_key_id
 
-  tags = merge(local.common_tags, { Name = "intelliops/${var.environment}/sonarqube" })
+  depends_on = [null_resource.clear_pending_secrets]
+  tags       = merge(local.common_tags, { Name = "intelliops/${var.environment}/sonarqube" })
 }
