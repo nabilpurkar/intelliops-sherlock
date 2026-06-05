@@ -138,6 +138,48 @@ upsert_secret_key() {
   success "AWS SM updated: ${secret_id} → ${key}"
 }
 
+# ── Checkpoint / resume ────────────────────────────────────────────────────────
+# Each step is saved to .configure-state on success.
+# Re-running the script resumes from the last failure point.
+# Usage:
+#   ./configure-stack.sh             — resume from last checkpoint
+#   ./configure-stack.sh --reset     — delete checkpoint, start fresh
+#   ./configure-stack.sh --from=2    — re-run from step 2 onwards
+STATE_FILE="${REPO_ROOT}/.configure-state"
+
+is_done()   { grep -qxF "step-$1" "${STATE_FILE}" 2>/dev/null; }
+mark_done() { echo "step-$1" >> "${STATE_FILE}"; }
+
+for _arg in "$@"; do
+  case "${_arg}" in
+    --reset)
+      rm -f "${STATE_FILE}"
+      info "Configure state cleared — starting fresh"
+      ;;
+    --from=*)
+      _from="${_arg#--from=}"
+      if [ -f "${STATE_FILE}" ]; then
+        _ORDERED=(0 0b 1 2 3 4 5 6)
+        _NEW=""
+        _DROP=false
+        for _s in "${_ORDERED[@]}"; do
+          [[ "${_s}" == "${_from}" ]] && _DROP=true
+          ${_DROP} || _NEW+="step-${_s}"$'\n'
+        done
+        printf '%s' "${_NEW}" > "${STATE_FILE}"
+        info "Configure checkpoint rewound — re-running from step ${_from} onwards"
+      fi
+      ;;
+  esac
+done
+
+if [ -f "${STATE_FILE}" ]; then
+  _DONE=$(grep -c . "${STATE_FILE}" 2>/dev/null || echo 0)
+  info "Resuming configure — ${_DONE} steps already completed (--reset to start fresh)"
+else
+  info "Starting fresh configure run — progress saved to .configure-state"
+fi
+
 # ── Pre-flight ────────────────────────────────────────────────────────────────
 step "Pre-flight checks"
 
@@ -174,6 +216,7 @@ info "ALB: ${ALB_HOST}"
 #      /metrics, and all API routes with valid JSON so probes pass.
 # ─────────────────────────────────────────────────────────────────────────────
 step "0/7  ECR image bootstrap"
+if ! is_done "0"; then
 
 ecr_has_images() {
   local repo="${ECR_NAMESPACE}/$1"
@@ -187,38 +230,55 @@ ecr_has_images() {
 # Port assignments match k8s/apps/*.yaml containerPort declarations
 declare -A SVC_PORT=( [order-service]=8000 [payment-service]=8002 [inventory-service]=8001 )
 
-# Build a minimal FastAPI stub image for a service, piping the Dockerfile inline.
+# Build a minimal FastAPI stub image for a service using a temp build context.
+# Writing to a temp dir avoids Dockerfile-heredoc parse errors where Python lines
+# get mistaken for Dockerfile instructions.
 # $1 = service name, $2 = port, $3 = full image ref
 build_stub_image() {
   local svc=$1 port=$2 img=$3
   info "Building stub image for ${svc} (no services/${svc}/ found locally) ..."
-  docker build -t "${img}" - <<DOCKERFILE
+  local tmpdir
+  tmpdir=$(mktemp -d)
+
+  # Write app — <<'PYEOF' prevents bash from expanding {path:path} etc.
+  cat > "${tmpdir}/main.py" << 'PYEOF'
+from fastapi import FastAPI
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from starlette.responses import Response
+
+app = FastAPI()
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.get("/ready")
+def ready():
+    return {"status": "ready"}
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+def catch_all(path: str):
+    return {"stub": True, "path": path}
+PYEOF
+
+  # Write Dockerfile — unquoted DFEOF so ${port} is expanded by bash to the port number
+  cat > "${tmpdir}/Dockerfile" << DFEOF
 FROM python:3.12-slim
-RUN pip install --no-cache-dir fastapi uvicorn prometheus-client 2>/dev/null
+RUN pip install --no-cache-dir fastapi uvicorn prometheus-client
 RUN useradd -u 1000 -m app
 USER 1000
 WORKDIR /app
-RUN python3 -c "
-import pathlib, textwrap
-pathlib.Path('main.py').write_text(textwrap.dedent('''
-  from fastapi import FastAPI
-  from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-  from starlette.responses import Response
-  app = FastAPI(title=\"${svc} stub\")
-  @app.get(\"/health\")
-  def health(): return {\"status\": \"ok\", \"service\": \"${svc}\"}
-  @app.get(\"/ready\")
-  def ready():  return {\"status\": \"ready\"}
-  @app.get(\"/metrics\")
-  def metrics():
-      return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-  @app.api_route(\"/{path:path}\", methods=[\"GET\",\"POST\",\"PUT\",\"DELETE\",\"PATCH\"])
-  def catch_all(path: str): return {\"stub\": True, \"service\": \"${svc}\", \"path\": path}
-'''))
-"
+COPY main.py .
 EXPOSE ${port}
 CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${port}"]
-DOCKERFILE
+DFEOF
+
+  docker build -t "${img}" "${tmpdir}"
+  rm -rf "${tmpdir}"
 }
 
 need_bootstrap=false
@@ -306,76 +366,89 @@ for attempt in $(seq 1 30); do
   sleep 10
 done
 
+mark_done "0"
+fi  # end step 0
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 0b. Ingress reconciliation — re-apply so Kong picks up running services
 # ─────────────────────────────────────────────────────────────────────────────
 step "0b/7  Ingress reconciliation"
+if ! is_done "0b"; then
+  INGRESS="${REPO_ROOT}/k8s/ingress"
+  info "Re-applying all ingresses to ensure Kong has current addresses ..."
+  kubectl apply -f "${INGRESS}/ingress-apps.yaml"        2>/dev/null || true
+  kubectl apply -f "${INGRESS}/ingress-kong-admin.yaml"  2>/dev/null || true
+  kubectl apply -f "${INGRESS}/ingress-locust.yaml"      2>/dev/null || true
 
-INGRESS="${REPO_ROOT}/k8s/ingress"
-info "Re-applying all ingresses to ensure Kong has current addresses ..."
-kubectl apply -f "${INGRESS}/ingress-apps.yaml"        2>/dev/null || true
-kubectl apply -f "${INGRESS}/ingress-kong-admin.yaml"  2>/dev/null || true
-kubectl apply -f "${INGRESS}/ingress-locust.yaml"      2>/dev/null || true
+  # Give Kong 15s to reconcile
+  sleep 15
 
-# Give Kong 15s to reconcile
-sleep 15
+  info "Ingress address summary:"
+  kubectl get ingress -A --no-headers \
+    2>/dev/null | awk '{printf "  %-20s %-15s %s\n", $2, $5, $4}' || true
 
-info "Ingress address summary:"
-kubectl get ingress -A --no-headers \
-  2>/dev/null | awk '{printf "  %-20s %-15s %s\n", $2, $5, $4}' || true
+  mark_done "0b"
+fi  # end step 0b
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. SonarQube — create project + CI token
 # ─────────────────────────────────────────────────────────────────────────────
 step "1/7  SonarQube — project + CI token"
+if ! is_done "1"; then
+  wait_for_url "SonarQube" "${SONAR_URL}/api/system/status" 60 10
 
-wait_for_url "SonarQube" "${SONAR_URL}/api/system/status" 60 10
+  SONAR_ADMIN="admin"
+  SONAR_ADMIN_PASS=$(get_secret_key "intelliops/dev/sonarqube" "admin_password")
+  [ -z "${SONAR_ADMIN_PASS}" ] && SONAR_ADMIN_PASS="admin"
 
-SONAR_ADMIN="admin"
-SONAR_ADMIN_PASS=$(get_secret_key "intelliops/dev/sonarqube" "admin_password")
-[ -z "${SONAR_ADMIN_PASS}" ] && SONAR_ADMIN_PASS="admin"
-
-if ! curl -sf --max-time 10 \
-    -u "${SONAR_ADMIN}:${SONAR_ADMIN_PASS}" \
-    "${SONAR_URL}/api/authentication/validate" \
-  | python3 -c "import sys,json; assert json.load(sys.stdin).get('valid') is True" 2>/dev/null; then
-  die "SonarQube admin credentials invalid.
+  if ! curl -sf --max-time 10 \
+      -u "${SONAR_ADMIN}:${SONAR_ADMIN_PASS}" \
+      "${SONAR_URL}/api/authentication/validate" \
+    | python3 -c "import sys,json; assert json.load(sys.stdin).get('valid') is True" 2>/dev/null; then
+    die "SonarQube admin credentials invalid.
   Store the correct password:
     aws secretsmanager put-secret-value \\
       --secret-id intelliops/dev/sonarqube \\
       --secret-string '{\"admin_password\":\"<password>\"}'"
-fi
-info "SonarQube credentials validated"
+  fi
+  info "SonarQube credentials validated"
 
-HTTP=$(curl -so /dev/null -w "%{http_code}" \
-  -u "${SONAR_ADMIN}:${SONAR_ADMIN_PASS}" \
-  -X POST "${SONAR_URL}/api/projects/create" \
-  --data-urlencode "name=IntelliOps Sherlock" \
-  -d "project=intelliops-sherlock&visibility=private" 2>/dev/null)
-case "${HTTP}" in
-  200|201) success "SonarQube project 'intelliops-sherlock' created" ;;
-  400)     warn    "SonarQube project already exists — skipping" ;;
-  *)       die     "Failed to create SonarQube project (HTTP ${HTTP})" ;;
-esac
+  HTTP=$(curl -so /dev/null -w "%{http_code}" \
+    -u "${SONAR_ADMIN}:${SONAR_ADMIN_PASS}" \
+    -X POST "${SONAR_URL}/api/projects/create" \
+    --data-urlencode "name=IntelliOps Sherlock" \
+    -d "project=intelliops-sherlock&visibility=private" 2>/dev/null)
+  case "${HTTP}" in
+    200|201) success "SonarQube project 'intelliops-sherlock' created" ;;
+    400)     warn    "SonarQube project already exists — skipping" ;;
+    *)       die     "Failed to create SonarQube project (HTTP ${HTTP})" ;;
+  esac
 
-curl -sf -u "${SONAR_ADMIN}:${SONAR_ADMIN_PASS}" \
-  -X POST "${SONAR_URL}/api/user_tokens/revoke" \
-  -d "name=github-ci" >/dev/null 2>&1 || true
+  curl -sf -u "${SONAR_ADMIN}:${SONAR_ADMIN_PASS}" \
+    -X POST "${SONAR_URL}/api/user_tokens/revoke" \
+    -d "name=github-ci" >/dev/null 2>&1 || true
 
-SONAR_TOKEN=$(curl -sf \
-  -u "${SONAR_ADMIN}:${SONAR_ADMIN_PASS}" \
-  -X POST "${SONAR_URL}/api/user_tokens/generate" \
-  -d "name=github-ci&type=USER_TOKEN" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
-success "SonarQube CI token generated"
+  SONAR_TOKEN=$(curl -sf \
+    -u "${SONAR_ADMIN}:${SONAR_ADMIN_PASS}" \
+    -X POST "${SONAR_URL}/api/user_tokens/generate" \
+    -d "name=github-ci&type=USER_TOKEN" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+  success "SonarQube CI token generated"
 
-upsert_secret_key "intelliops/dev/sonarqube" "admin_password" "${SONAR_ADMIN_PASS}"
-upsert_secret_key "intelliops/dev/sonarqube" "ci_token"       "${SONAR_TOKEN}"
+  upsert_secret_key "intelliops/dev/sonarqube" "admin_password" "${SONAR_ADMIN_PASS}"
+  upsert_secret_key "intelliops/dev/sonarqube" "ci_token"       "${SONAR_TOKEN}"
+  mark_done "1"
+fi  # end step 1
+# Ensure vars available for steps 6 + 7 when step was checkpointed
+SONAR_ADMIN_PASS=${SONAR_ADMIN_PASS:-$(get_secret_key "intelliops/dev/sonarqube" "admin_password")}
+SONAR_TOKEN=${SONAR_TOKEN:-$(get_secret_key "intelliops/dev/sonarqube" "ci_token")}
+SONAR_ADMIN="admin"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. DefectDojo — API token + product
 # ─────────────────────────────────────────────────────────────────────────────
 step "2/7  DefectDojo — API token + product"
+if ! is_done "2"; then
 
 wait_for_url "DefectDojo API" "${DEFECTDOJO_URL}/api/v2/users/?limit=1" 60 10
 
@@ -417,10 +490,18 @@ kubectl annotate externalsecret falco-defectdojo-secret -n falco \
   "force-sync=$(date +%s)" --overwrite >/dev/null 2>&1 \
   && info "Triggered ExternalSecret refresh for falco-defectdojo-apikey" || true
 
+mark_done "2"
+fi  # end step 2
+# Ensure vars available for steps 6 + 7 when step was checkpointed
+DD_ADMIN_PASS=${DD_ADMIN_PASS:-$(get_secret_key "intelliops/dev/defectdojo" "admin_password")}
+DD_TOKEN=${DD_TOKEN:-$(get_secret_key "intelliops/dev/defectdojo" "api_key")}
+DD_ADMIN="admin"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. ArgoCD — admin password + Applications + auth token
 # ─────────────────────────────────────────────────────────────────────────────
 step "3/7  ArgoCD — credentials + Applications + auth token"
+if ! is_done "3"; then
 
 # Priority: k8s initial-admin-secret → AWS SM
 ARGOCD_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
@@ -470,10 +551,17 @@ else
   done
 fi
 
+mark_done "3"
+fi  # end step 3
+# Ensure vars available for steps 6 + 7 when step was checkpointed
+ARGOCD_PASS=${ARGOCD_PASS:-$(get_secret_key "intelliops/dev/argocd" "admin_password")}
+ARGOCD_AUTH_TOKEN=${ARGOCD_AUTH_TOKEN:-$(get_secret_key "intelliops/dev/argocd" "auth_token")}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Grafana — admin password
 # ─────────────────────────────────────────────────────────────────────────────
 step "4/7  Grafana — admin password"
+if ! is_done "4"; then
 
 # Priority: k8s secret → AWS SM
 GRAFANA_PASS=$(kubectl get secret kube-prometheus-stack-grafana -n monitoring \
@@ -491,10 +579,17 @@ else
   warn "Grafana password not found in k8s secret or AWS SM"
 fi
 
+mark_done "4"
+fi  # end step 4
+# Ensure var available for step 7 when step was checkpointed
+GRAFANA_PASS=${GRAFANA_PASS:-$(get_secret_key "intelliops/dev/grafana" "admin_password")}
+[ -z "${GRAFANA_PASS}" ] && GRAFANA_PASS="(check AWS SM: intelliops/dev/grafana → admin_password)"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Kong admin password
 # ─────────────────────────────────────────────────────────────────────────────
 step "5/7  Kong admin credentials"
+if ! is_done "5"; then
 
 KONG_ADMIN_PASS=$(kubectl get secret kong-enterprise-superuser-password -n kong \
   -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
@@ -505,6 +600,12 @@ fi
 [ -z "${KONG_ADMIN_PASS}" ] && KONG_ADMIN_PASS="(see AWS SM: intelliops/dev/kong)"
 
 success "Kong admin credentials retrieved"
+
+mark_done "5"
+fi  # end step 5
+# Ensure var available when step was checkpointed
+KONG_ADMIN_PASS=${KONG_ADMIN_PASS:-$(get_secret_key "intelliops/dev/kong" "admin_password")}
+[ -z "${KONG_ADMIN_PASS}" ] && KONG_ADMIN_PASS="(see AWS SM: intelliops/dev/kong)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. GitHub secrets (optional — only when GITHUB_PAT is set)
