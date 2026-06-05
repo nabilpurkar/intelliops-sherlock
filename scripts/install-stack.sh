@@ -497,9 +497,18 @@ is_done "12" || {
 step "13/28  loki"
 is_done "13" || {
   helm_install loki monitoring \
-    "${CHARTS}/loki-stack" \
+    "${CHARTS}/loki" \
     -f "${VALUES}/loki-values.yaml"
   mark_done "13"
+}
+
+# ─── 13b. promtail ───────────────────────────────────────────────────────────
+step "13b/28  promtail"
+is_done "13b" || {
+  helm_install promtail monitoring \
+    "${CHARTS}/promtail" \
+    -f "${VALUES}/promtail-values.yaml"
+  mark_done "13b"
 }
 
 # ─── 14. tempo ───────────────────────────────────────────────────────────────

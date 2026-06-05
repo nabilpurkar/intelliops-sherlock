@@ -55,6 +55,8 @@ grafana:
           enabled: true
         search:
           hide: false
+        lokiSearch:
+          datasourceUid: Loki
 
 prometheus:
   prometheusSpec:

@@ -6,6 +6,14 @@ mode: deployment
 image:
   repository: otel/opentelemetry-collector-contrib
 
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
 # Expose port 8889 so Prometheus can scrape OTEL-forwarded metrics
 ports:
   prometheus:
@@ -37,7 +45,7 @@ config:
       tls:
         insecure: true
     otlp_grpc/tempo:
-      endpoint: http://tempo.monitoring.svc.cluster.local:4317
+      endpoint: tempo.monitoring.svc.cluster.local:4317
       tls:
         insecure: true
 
