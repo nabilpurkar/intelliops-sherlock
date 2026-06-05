@@ -40,3 +40,5 @@ spec:
       kind: Role
     - group: "rbac.authorization.k8s.io"
       kind: RoleBinding
+    - group: "monitoring.coreos.com"
+      kind: ServiceMonitor
