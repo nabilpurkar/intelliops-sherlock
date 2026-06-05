@@ -130,13 +130,15 @@ echo ""
 step "1/8  Pause ArgoCD Applications"
 
 if kubectl get applications -n argocd &>/dev/null 2>&1; then
-  for app in microservices locust; do
+  # Disable auto-sync on ALL apps first so self-heal doesn't fight the delete
+  for app in $(kubectl get applications -n argocd -o name 2>/dev/null | sed 's|application.argoproj.io/||'); do
     kubectl patch application "${app}" -n argocd \
       --type merge -p '{"spec":{"syncPolicy":null}}' 2>/dev/null \
       && info "ArgoCD auto-sync disabled for ${app}" || true
   done
-  kubectl delete application microservices locust -n argocd \
-    --ignore-not-found --timeout=60s 2>/dev/null || true
+  # Delete all ArgoCD applications (removes managed workloads via cascade)
+  kubectl delete applications --all -n argocd \
+    --ignore-not-found --timeout=120s 2>/dev/null || true
   success "ArgoCD Applications removed"
 else
   warn "ArgoCD not reachable — skipping (cluster may already be down)"
@@ -161,12 +163,61 @@ done
 info "Deleting all PVCs cluster-wide (prevents orphaned EBS volumes) ..."
 kubectl delete pvc --all -A --timeout=120s 2>/dev/null || true
 
+# Capture Route53 zone + hosted records BEFORE deleting ingresses
+# (ingress hosts tell us which zone external-dns managed)
+R53_DOMAIN=$(kubectl get ingress --all-namespaces \
+  -o jsonpath='{.items[0].spec.rules[0].host}' 2>/dev/null \
+  | sed 's/^[^.]*\.//' || true)
+R53_ZONE_ID=""
+if [ -n "${R53_DOMAIN}" ]; then
+  R53_ZONE_ID=$(aws route53 list-hosted-zones \
+    --query "HostedZones[?Name=='${R53_DOMAIN}.'].Id" \
+    --output text 2>/dev/null | cut -d'/' -f3 || true)
+  info "Route53 zone: ${R53_DOMAIN} (${R53_ZONE_ID})"
+fi
+
 # Delete all ingresses now — ExternalDNS needs time to clean Route53 before ALB is gone
 info "Removing all ingresses (ExternalDNS will clean Route53 records) ..."
 kubectl delete ingress --all -A --timeout=60s 2>/dev/null || true
 
-info "Waiting 45s for ExternalDNS to remove Route53 records ..."
-sleep 45
+info "Waiting 60s for ExternalDNS to remove Route53 records ..."
+sleep 60
+
+# Actively clean any Route53 records that ExternalDNS did not remove in time.
+# ExternalDNS marks its records with a TXT ownership record; we delete both.
+if [ -n "${R53_ZONE_ID}" ]; then
+  info "Verifying Route53 cleanup for zone ${R53_ZONE_ID} ..."
+  # Collect all A/CNAME records (not SOA/NS which are permanent)
+  STALE_RECORDS=$(aws route53 list-resource-record-sets \
+    --hosted-zone-id "${R53_ZONE_ID}" \
+    --query "ResourceRecordSets[?Type=='A' || Type=='CNAME' || Type=='TXT'].Name" \
+    --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' || true)
+  if [ -n "${STALE_RECORDS}" ]; then
+    warn "Stale Route53 records found — force-deleting ..."
+    # Build a change batch and submit one delete call per record set
+    aws route53 list-resource-record-sets \
+      --hosted-zone-id "${R53_ZONE_ID}" \
+      --query "ResourceRecordSets[?Type=='A' || Type=='CNAME' || Type=='TXT']" \
+      --output json 2>/dev/null \
+    | python3 -c "
+import sys, json
+records = json.load(sys.stdin)
+changes = [{'Action': 'DELETE', 'ResourceRecordSet': r} for r in records]
+if changes:
+    print(json.dumps({'Changes': changes}))
+" > /tmp/r53-delete-batch.json 2>/dev/null || true
+    if [ -s /tmp/r53-delete-batch.json ]; then
+      aws route53 change-resource-record-sets \
+        --hosted-zone-id "${R53_ZONE_ID}" \
+        --change-batch "file:///tmp/r53-delete-batch.json" \
+        --region us-east-1 2>/dev/null \
+        && success "Route53 records deleted" \
+        || warn "Some Route53 records may remain — check manually"
+    fi
+  else
+    success "Route53 zone is clean"
+  fi
+fi
 
 # ── Step 3: Uninstall Helm releases ───────────────────────────────────────────
 step "3/8  Uninstall Helm releases"
@@ -191,69 +242,76 @@ done
 # This is the #1 cause of terraform destroy failures.
 # The ALB/NLB controller deletes LBs asynchronously after helm uninstall.
 # If terraform tries to delete subnets/VPC before LBs are gone, it fails.
-step "4/8  Wait for AWS Load Balancers to be deleted"
+step "4/8  Delete AWS Load Balancers and clean up leaked resources"
 
-info "Checking for ALBs/NLBs tagged with cluster ${CLUSTER_NAME} ..."
-LB_WAIT=0
-LB_MAX_WAIT=300  # 5 minutes max
-while true; do
-  LB_COUNT=$(aws elbv2 describe-load-balancers \
-    --query "LoadBalancers[?contains(LoadBalancerName, '${CLUSTER_NAME}') || contains(to_string(Tags), '${CLUSTER_NAME}')].LoadBalancerArn" \
-    --output text --region "${REGION}" 2>/dev/null | wc -w || echo "0")
+# Use the cluster VPC to find ALL LBs — catches Kong ALBs (k8s-intelliopsalb-*)
+# which don't have the cluster name in their name and are missed by name-based filters.
+EKS_VPC_ID=$(aws eks describe-cluster \
+  --name "${CLUSTER_NAME}" --region "${REGION}" \
+  --query 'cluster.resourcesVpcConfig.vpcId' --output text 2>/dev/null || true)
 
-  # Also check classic ELBs
-  CLB_COUNT=$(aws elb describe-load-balancers \
-    --query "LoadBalancerDescriptions[?contains(LoadBalancerName, 'k8s')].LoadBalancerName" \
-    --output text --region "${REGION}" 2>/dev/null | wc -w || echo "0")
+info "EKS VPC: ${EKS_VPC_ID} — scanning for ALL load balancers in this VPC ..."
 
-  TOTAL=$((LB_COUNT + CLB_COUNT))
-
-  if [ "${TOTAL}" -eq 0 ]; then
-    success "No AWS Load Balancers remaining"
-    break
+# Force-delete every ALB/NLB in the cluster VPC immediately (don't wait for controller)
+if [ -n "${EKS_VPC_ID}" ]; then
+  LB_ARNS=$(aws elbv2 describe-load-balancers \
+    --region "${REGION}" \
+    --query "LoadBalancers[?VpcId=='${EKS_VPC_ID}'].LoadBalancerArn" \
+    --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' || true)
+  if [ -n "${LB_ARNS}" ]; then
+    while IFS= read -r arn; do
+      [ -z "${arn}" ] && continue
+      warn "Force-deleting ALB/NLB: ${arn}"
+      aws elbv2 delete-load-balancer --load-balancer-arn "${arn}" \
+        --region "${REGION}" 2>/dev/null || true
+    done <<< "${LB_ARNS}"
+    # Wait for deletion to propagate (ENIs must be released before VPC can be destroyed)
+    info "Waiting for load balancer ENIs to be released ..."
+    LB_WAIT=0
+    until [ "$(aws elbv2 describe-load-balancers --region "${REGION}" \
+        --query "LoadBalancers[?VpcId=='${EKS_VPC_ID}'] | length(@)" \
+        --output text 2>/dev/null)" = "0" ] || [ "${LB_WAIT}" -ge 180 ]; do
+      sleep 10; LB_WAIT=$((LB_WAIT + 10))
+      info "  still waiting for LB deletion ... (${LB_WAIT}s)"
+    done
+  else
+    success "No ALBs/NLBs found in VPC"
   fi
+fi
 
-  if [ "${LB_WAIT}" -ge "${LB_MAX_WAIT}" ]; then
-    warn "Timed out waiting for LBs to be deleted — attempting to delete manually"
-    # Force-delete any remaining LBs tagged for this cluster
-    aws elbv2 describe-load-balancers \
-      --query "LoadBalancers[].LoadBalancerArn" \
-      --output text --region "${REGION}" 2>/dev/null \
-    | tr '\t' '\n' \
-    | while read -r arn; do
-        TAGS=$(aws elbv2 describe-tags --resource-arns "${arn}" \
-          --query "TagDescriptions[0].Tags[?contains(Value,'${CLUSTER_NAME}')].Value" \
-          --output text --region "${REGION}" 2>/dev/null || true)
-        if [ -n "${TAGS}" ]; then
-          warn "Force-deleting LB: ${arn}"
-          aws elbv2 delete-load-balancer --load-balancer-arn "${arn}" \
-            --region "${REGION}" 2>/dev/null || true
-        fi
-      done
-    sleep 30
-    break
-  fi
+# Classic ELBs (rare but check anyway)
+CLB_NAMES=$(aws elb describe-load-balancers \
+  --query "LoadBalancerDescriptions[?VPCId=='${EKS_VPC_ID}'].LoadBalancerName" \
+  --output text --region "${REGION}" 2>/dev/null | tr '\t' '\n' | grep -v '^$' || true)
+if [ -n "${CLB_NAMES}" ]; then
+  while IFS= read -r name; do
+    [ -z "${name}" ] && continue
+    warn "Deleting Classic ELB: ${name}"
+    aws elb delete-load-balancer --load-balancer-name "${name}" \
+      --region "${REGION}" 2>/dev/null || true
+  done <<< "${CLB_NAMES}"
+fi
 
-  info "  ${TOTAL} load balancer(s) still deleting ... (${LB_WAIT}/${LB_MAX_WAIT}s)"
-  sleep 15
-  LB_WAIT=$((LB_WAIT + 15))
+# Delete leaked security groups — k8s LB controller creates these with multiple tag patterns
+info "Cleaning up leaked security groups ..."
+for tag_filter in \
+  "Name=tag-key,Values=kubernetes.io/cluster/${CLUSTER_NAME}" \
+  "Name=tag-key,Values=elbv2.k8s.aws/cluster" \
+  "Name=vpc-id,Values=${EKS_VPC_ID}" ; do
+  aws ec2 describe-security-groups \
+    --filters "${tag_filter}" "Name=group-name,Values=k8s-*" \
+    --query 'SecurityGroups[].GroupId' \
+    --output text --region "${REGION}" 2>/dev/null \
+  | tr '\t' '\n' \
+  | while read -r sg; do
+      [ -z "${sg}" ] && continue
+      warn "Deleting leaked security group: ${sg}"
+      aws ec2 delete-security-group --group-id "${sg}" \
+        --region "${REGION}" 2>/dev/null || true
+    done
 done
 
-# Also clean up any leaked security groups created by the LB controller
-info "Checking for leaked security groups ..."
-aws ec2 describe-security-groups \
-  --filters "Name=tag-key,Values=kubernetes.io/cluster/${CLUSTER_NAME}" \
-  --query 'SecurityGroups[].GroupId' \
-  --output text --region "${REGION}" 2>/dev/null \
-| tr '\t' '\n' \
-| while read -r sg; do
-    [ -z "${sg}" ] && continue
-    warn "Deleting leaked security group: ${sg}"
-    aws ec2 delete-security-group --group-id "${sg}" \
-      --region "${REGION}" 2>/dev/null || true
-  done
-
-success "AWS resource cleanup complete"
+success "AWS load balancer and security group cleanup complete"
 
 # ── Step 5: Delete custom namespaces ──────────────────────────────────────────
 step "5/8  Delete namespaces"
