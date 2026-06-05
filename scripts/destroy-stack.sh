@@ -70,6 +70,8 @@ fi
 HELM_RELEASES=(
   "gatekeeper:gatekeeper-system"
   "kyverno:kyverno"
+  "litmus:litmus"
+  "backstage:backstage"
   "defectdojo:defectdojo"
   "sonarqube:sonarqube"
   "falco:falco"
@@ -97,6 +99,7 @@ CUSTOM_NAMESPACES=(
   apps locust argocd defectdojo sonarqube falco kong
   monitoring external-dns external-secrets cert-manager
   database linkerd gatekeeper-system kyverno
+  backstage litmus aiops-demo
 )
 
 # ── Confirmation ──────────────────────────────────────────────────────────────
@@ -111,9 +114,9 @@ echo -e "  Cluster   : ${CLUSTER_NAME}"
 echo -e "  TF state  : s3://${TF_BUCKET}/${TF_KEY}"
 echo -e "  Instance  : ${INSTANCE_ID} (will be STOPPED, not terminated)"
 echo ""
-echo -e "  ${RED}This will destroy the entire EKS cluster and all resources.${NC}"
-echo -e "  ${RED}ECR images are NOT deleted (reusable on next deploy).${NC}"
-echo -e "  ${YELLOW}AWS SM secrets are NOT deleted (credentials survive).${NC}"
+echo -e "  ${RED}This will destroy the entire EKS cluster and ALL resources.${NC}"
+echo -e "  ${RED}ECR repos + images ARE deleted (force_delete=true).${NC}"
+echo -e "  ${RED}AWS SM secrets ARE deleted by terraform (regenerated on next install).${NC}"
 echo ""
 
 if [ "${SKIP_CONFIRM:-false}" != "true" ]; then
@@ -344,8 +347,8 @@ echo ""
 echo -e "  ${CYAN}EKS cluster${NC}    destroyed"
 echo -e "  ${CYAN}Helm releases${NC}  uninstalled (${#HELM_RELEASES[@]} releases)"
 echo -e "  ${CYAN}TF state${NC}       deleted from s3://${TF_BUCKET}/${TF_KEY}"
-echo -e "  ${CYAN}AWS SM secrets${NC} preserved (credentials survive)"
-echo -e "  ${CYAN}ECR images${NC}     preserved (faster next bootstrap)"
+echo -e "  ${CYAN}AWS SM secrets${NC} deleted by terraform (regenerated on next install)"
+echo -e "  ${CYAN}ECR repos${NC}      deleted (force_delete=true — rebuilt on next deploy)"
 echo ""
 echo -e "  ${YELLOW}To redeploy:${NC}"
 echo -e "    Start this instance → SSH in → cd intelliops-sherlock"

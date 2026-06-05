@@ -76,9 +76,19 @@ _sm_has_value() {
 }
 
 _sm_put() {
-  aws secretsmanager put-secret-value \
-    --secret-id "$1" --region "${REGION}" --secret-string "$2" \
-    --query VersionId --output text 2>/dev/null
+  local secret_id="$1" secret_string="$2"
+  if aws secretsmanager describe-secret --secret-id "${secret_id}" \
+      --region "${REGION}" &>/dev/null; then
+    aws secretsmanager put-secret-value \
+      --secret-id "${secret_id}" --region "${REGION}" \
+      --secret-string "${secret_string}" \
+      --query VersionId --output text 2>/dev/null
+  else
+    aws secretsmanager create-secret \
+      --name "${secret_id}" --region "${REGION}" \
+      --secret-string "${secret_string}" \
+      --query ARN --output text 2>/dev/null
+  fi
 }
 
 # ── postgresql ──────────────────────────────────────────────────────────────
@@ -479,6 +489,8 @@ success "Gatekeeper constraints applied"
 
 # ─── 22. Prometheus Pushgateway (DORA metrics receiver) ──────────────────────
 step "22/25  prometheus-pushgateway (DORA metrics)"
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
+helm repo update prometheus-community 2>/dev/null || true
 helm_install prometheus-pushgateway monitoring \
   prometheus-community/prometheus-pushgateway \
   -f "${VALUES}/pushgateway-values.yaml"
