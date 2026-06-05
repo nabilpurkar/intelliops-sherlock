@@ -183,18 +183,19 @@ fi
 # ── Linkerd PKI — generate certs if SM secret is empty ──────────────────────
 if ! _sm_has_value "intelliops/dev/linkerd" "ca_crt_b64"; then
   info "Linkerd PKI not found in SM — generating trust anchor + issuer certs ..."
-  STEP_CLI=$(command -v step 2>/dev/null) \
-    || die "step CLI not found — install: brew install step / sudo apt install step-cli"
+  # Use env to bypass the step() shell function that shadows the binary
+  STEP_BIN=$(env which step 2>/dev/null || echo "/usr/local/bin/step")
+  [ -x "${STEP_BIN}" ] || die "step CLI not found at ${STEP_BIN} — install: sudo apt install step-cli"
 
   TMPDIR_LINKERD=$(mktemp -d)
   trap 'rm -rf "${TMPDIR_LINKERD}"' EXIT
 
-  "${STEP_CLI}" certificate create root.linkerd.cluster.local \
+  "${STEP_BIN}" certificate create root.linkerd.cluster.local \
     "${TMPDIR_LINKERD}/ca.crt" "${TMPDIR_LINKERD}/ca.key" \
     --profile root-ca --no-password --insecure \
     --not-after 87600h
 
-  "${STEP_CLI}" certificate create identity.linkerd.cluster.local \
+  "${STEP_BIN}" certificate create identity.linkerd.cluster.local \
     "${TMPDIR_LINKERD}/issuer.crt" "${TMPDIR_LINKERD}/issuer.key" \
     --profile intermediate-ca --no-password --insecure \
     --ca "${TMPDIR_LINKERD}/ca.crt" --ca-key "${TMPDIR_LINKERD}/ca.key" \
