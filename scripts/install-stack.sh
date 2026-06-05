@@ -619,20 +619,17 @@ step "28/28  AIOps workloads (anomaly-detector, forecaster, alert-correlator, ai
 info "Applying aiops-config ConfigMap + namespace resources ..."
 kubectl apply -f "${REPO_ROOT}/k8s/deployments/anomaly-detector.yaml"
 
-info "Updating aiops-config SQS_QUEUE_URL from Terraform output ..."
-SQS_URL=$(cd "${REPO_ROOT}/terraform/environments/dev" && \
-  terraform output -raw 2>/dev/null <<< "" || true)
-# If terraform CLI unavailable, try AWS directly
-if [ -z "${SQS_URL}" ]; then
-  ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
-  REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
-  SQS_URL="https://sqs.${REGION}.amazonaws.com/${ACCOUNT_ID}/intelliops-anomalies"
-fi
-if [ -n "${SQS_URL}" ]; then
+info "Patching aiops-config SQS_QUEUE_URL with account-specific queue URL ..."
+_ACCT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || true)
+_REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
+if [ -n "${_ACCT}" ]; then
+  _SQS_URL="https://sqs.${_REGION}.amazonaws.com/${_ACCT}/intelliops-anomalies"
   kubectl patch configmap aiops-config -n aiops-demo \
     --type merge \
-    -p "{\"data\":{\"SQS_QUEUE_URL\":\"${SQS_URL}\"}}" 2>/dev/null || true
-  info "SQS URL set to: ${SQS_URL}"
+    -p "{\"data\":{\"SQS_QUEUE_URL\":\"${_SQS_URL}\"}}" 2>/dev/null || true
+  info "SQS URL set to: ${_SQS_URL}"
+else
+  warn "Could not determine AWS account — SQS_QUEUE_URL left empty; ai-agent will poll but not send to SQS"
 fi
 
 info "Applying forecaster ..."

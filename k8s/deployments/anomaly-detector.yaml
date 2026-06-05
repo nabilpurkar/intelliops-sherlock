@@ -140,8 +140,8 @@ metadata:
   name: aiops-config
   namespace: aiops-demo
 data:
-  SQS_QUEUE_URL: ""  # populated by configure-stack.sh with Terraform output
+  SQS_QUEUE_URL: ""  # patched at deploy time by install-stack.sh — account-specific
   ARGOCD_URL: "http://argocd-server.argocd.svc.cluster.local"
-  PROMETHEUS_URL: "http://prometheus.monitoring.svc.cluster.local:9090"
-  ALERTMANAGER_URL: "http://alertmanager.monitoring.svc.cluster.local:9093"
+  PROMETHEUS_URL: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+  ALERTMANAGER_URL: "http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093"
   LOKI_URL: "http://loki.monitoring.svc.cluster.local:3100"

@@ -35,3 +35,10 @@ spec:
         maxDuration: 3m
 
   revisionHistoryLimit: 5
+
+  ignoreDifferences:
+    - group: ""
+      kind: ConfigMap
+      name: aiops-config
+      jsonPointers:
+        - /data/SQS_QUEUE_URL
