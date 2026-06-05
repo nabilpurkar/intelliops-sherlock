@@ -42,3 +42,5 @@ spec:
       kind: RoleBinding
     - group: "monitoring.coreos.com"
       kind: ServiceMonitor
+    - group: "networking.k8s.io"
+      kind: NetworkPolicy
