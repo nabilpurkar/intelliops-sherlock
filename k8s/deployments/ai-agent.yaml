@@ -117,3 +117,18 @@ spec:
             readOnlyRootFilesystem: false
             capabilities:
               drop: [ALL]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-agent
+  namespace: aiops-demo
+  labels:
+    app: ai-agent
+spec:
+  selector:
+    app: ai-agent
+  ports:
+    - port: 8080
+      targetPort: 8080
