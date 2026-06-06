@@ -45,6 +45,10 @@ mongodb:
     # Credentials come from a k8s Secret created by install-stack.sh from
     # AWS Secrets Manager (intelliops/dev/litmus) — nothing hardcoded here.
     existingSecret: litmus-mongodb-secret
+  volumePermissions:
+    enabled: false
+  arbiter:
+    enabled: false
 
 adminConfig:
   DBUSER: "admin"

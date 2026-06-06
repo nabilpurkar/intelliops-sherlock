@@ -24,9 +24,10 @@ spec:
       prune: true      # remove resources deleted from git
       selfHeal: true   # revert manual cluster changes
     syncOptions:
-      - CreateNamespace=false   # namespace pre-created by install-stack.sh
-      - ApplyOutOfSyncOnly=true # skip already-synced resources
-      - ServerSideApply=true    # avoids annotation size limit on large objects
+      - CreateNamespace=false          # namespace pre-created by install-stack.sh
+      - ApplyOutOfSyncOnly=true        # skip already-synced resources
+      - ServerSideApply=true           # avoids annotation size limit on large objects
+      - SkipDryRunOnMissingResource=true  # tolerate CRDs not yet installed (ServiceMonitor, Instrumentation)
     retry:
       limit: 5
       backoff:

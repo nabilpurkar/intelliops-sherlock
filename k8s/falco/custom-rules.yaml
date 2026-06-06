@@ -7,7 +7,7 @@
   output: >
     Unexpected outbound from service pod
     (pod=%k8s.pod.name ns=%k8s.ns.name image=%container.image.repository
-    dst=%fd.rip:%fd.rport proto=%fd.proto)
+    dst=%fd.rip:%fd.rport)
   priority: WARNING
   tags: [network, microservice, intelliops]
 
