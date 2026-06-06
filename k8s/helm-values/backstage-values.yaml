@@ -65,8 +65,7 @@ backstage:
           password:
             $env: BACKSTAGE_DB_PASSWORD
           database: backstage
-          ssl:
-            rejectUnauthorized: false
+          ssl: false
       auth:
         dangerouslyDisableDefaultAuthPolicy: true
 
