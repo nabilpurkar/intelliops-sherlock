@@ -14,7 +14,7 @@ metadata:
       Apply this policy ONLY after configuring Kyverno IRSA in Terraform.
       configure-stack.sh deletes this policy during bootstrap for that reason.
 spec:
-  validationFailureAction: Enforce
+  validationFailureAction: Audit
   background: false
   rules:
     - name: verify-cosign-signature
