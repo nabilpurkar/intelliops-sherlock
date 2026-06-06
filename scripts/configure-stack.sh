@@ -774,23 +774,49 @@ else
 
   wait_for_url "ArgoCD API" "${ARGOCD_URL}/api/v1/session" 30 10
 
-  ARGOCD_AUTH_TOKEN=$(curl -sf -X POST "${ARGOCD_URL}/api/v1/session" \
+  # Admin session token (short-lived, for internal use only)
+  ARGOCD_ADMIN_SESSION=$(curl -sf -X POST "${ARGOCD_URL}/api/v1/session" \
     -H "Content-Type: application/json" \
     -d "{\"username\":\"admin\",\"password\":\"${ARGOCD_PASS}\"}" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])") || ARGOCD_AUTH_TOKEN=""
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])") || ARGOCD_ADMIN_SESSION=""
 
-  if [ -n "${ARGOCD_AUTH_TOKEN}" ]; then
-    upsert_secret_key "intelliops/dev/argocd" "auth_token" "${ARGOCD_AUTH_TOKEN}"
-    success "ArgoCD auth token generated and stored in AWS SM"
+  # Try to get existing long-lived ci-deployer project token from SM
+  ARGOCD_AUTH_TOKEN=$(get_secret_key "intelliops/dev/argocd" "ci_token" 2>/dev/null || echo "")
+
+  if [ -z "${ARGOCD_AUTH_TOKEN}" ] && [ -n "${ARGOCD_ADMIN_SESSION}" ]; then
+    # Create or refresh long-lived ci-deployer role token (1 year)
+    # Ensure the role exists in the project first
+    kubectl patch appproject intelliops -n argocd --type merge -p '{
+      "spec": {"roles": [{"name":"ci-deployer","description":"CI/CD pipeline role",
+        "policies":["p, proj:intelliops:ci-deployer, applications, sync, intelliops/*, allow",
+                    "p, proj:intelliops:ci-deployer, applications, get, intelliops/*, allow"],
+        "jwtTokens":[]}]}}' 2>/dev/null || true
+
+    ARGOCD_AUTH_TOKEN=$(curl -sf -X POST "${ARGOCD_URL}/api/v1/projects/intelliops/roles/ci-deployer/token" \
+      -H "Authorization: Bearer ${ARGOCD_ADMIN_SESSION}" \
+      -H "Content-Type: application/json" \
+      -d '{"expiresIn": 31536000}' \
+      | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])") || ARGOCD_AUTH_TOKEN=""
+
+    if [ -n "${ARGOCD_AUTH_TOKEN}" ]; then
+      upsert_secret_key "intelliops/dev/argocd" "ci_token" "${ARGOCD_AUTH_TOKEN}"
+      success "ArgoCD CI deployer token created (1-year expiry) and stored in AWS SM"
+    else
+      # Fall back to short-lived admin session token
+      ARGOCD_AUTH_TOKEN="${ARGOCD_ADMIN_SESSION}"
+      upsert_secret_key "intelliops/dev/argocd" "auth_token" "${ARGOCD_AUTH_TOKEN}"
+      warn "Using short-lived admin token — will expire in 24h. Re-run to refresh."
+    fi
   else
-    warn "Could not generate ArgoCD auth token — CI will rely on auto-sync"
-    ARGOCD_AUTH_TOKEN=""
+    success "Using existing long-lived ArgoCD CI token from AWS SM"
   fi
 
+  # Use admin session token for internal sync operations (ci-deployer role is read+sync scoped)
+  _SYNC_TOKEN="${ARGOCD_ADMIN_SESSION:-${ARGOCD_AUTH_TOKEN}}"
   # Trigger sync for both apps
   for app in microservices locust; do
     curl -sf -X POST "${ARGOCD_URL}/api/v1/applications/${app}/sync" \
-      -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+      -H "Authorization: Bearer ${_SYNC_TOKEN}" \
       -H "Content-Type: application/json" \
       -d '{"prune":true}' >/dev/null 2>&1 \
       && success "${app} sync triggered" \
@@ -898,6 +924,7 @@ secrets = {
     "SONAR_TOKEN":        "${SONAR_TOKEN}",
     "DEFECTDOJO_API_KEY": "${DD_TOKEN}",
     "ARGOCD_AUTH_TOKEN":  "${ARGOCD_AUTH_TOKEN:-}",
+    "PUSHGATEWAY_URL":    "https://pushgateway.infrastructurepath.online",
 }
 secrets = {k: v for k, v in secrets.items() if v}
 
@@ -908,10 +935,23 @@ for name, value in secrets.items():
     })
     print(f"  [OK] {name} set")
 
-print("  GitHub secrets updated successfully")
+# Set repository variables (AWS account/region for ECR image references)
+repo_vars = {
+    "AWS_ACCOUNT_ID": "${AWS_ACCOUNT_ID}",
+    "AWS_REGION":     "${AWS_DEFAULT_REGION:-us-east-1}",
+}
+for name, value in repo_vars.items():
+    if value:
+        try:
+            gh_request(token, "POST", f"/repos/{repo}/actions/variables", {"name": name, "value": value})
+        except Exception:
+            gh_request(token, "PATCH", f"/repos/{repo}/actions/variables/{name}", {"name": name, "value": value})
+        print(f"  [OK] var {name} set")
+
+print("  GitHub secrets and variables updated successfully")
 PYTHON
 
-  success "GitHub secrets pushed: SONAR_TOKEN + DEFECTDOJO_API_KEY + ARGOCD_AUTH_TOKEN"
+  success "GitHub secrets pushed: SONAR_TOKEN + DEFECTDOJO_API_KEY + ARGOCD_AUTH_TOKEN + PUSHGATEWAY_URL"
 else
   warn "GITHUB_PAT not set — copy values from INSTRUCTIONS.md to GitHub manually"
   info "  Re-run with: GITHUB_PAT=ghp_xxx ./scripts/configure-stack.sh"
@@ -1007,7 +1047,15 @@ detect-changes → gitleaks → sast → unit-tests → sca → sonarqube
 |--------|-------|---------|
 | \`SONAR_TOKEN\` | \`${SONAR_TOKEN}\` | \`_sonarqube.yml\` |
 | \`DEFECTDOJO_API_KEY\` | \`${DD_TOKEN}\` | all scan workflows |
-| \`ARGOCD_AUTH_TOKEN\` | *(24-hr JWT — refresh via configure-stack.sh)* | \`_argocd-sync.yml\` |
+| \`ARGOCD_AUTH_TOKEN\` | *(1-year ci-deployer JWT — auto-refreshed by configure-stack.sh)* | \`_argocd-sync.yml\` |
+| \`PUSHGATEWAY_URL\` | \`https://pushgateway.infrastructurepath.online\` | \`_argocd-sync.yml\` (DORA) |
+
+### Repository Variables
+
+| Variable | Value | Used by |
+|----------|-------|---------|
+| \`AWS_ACCOUNT_ID\` | \`${AWS_ACCOUNT_ID}\` | \`_manifest-update.yml\` |
+| \`AWS_REGION\` | \`${AWS_DEFAULT_REGION:-us-east-1}\` | \`_manifest-update.yml\` |
 
 ---
 

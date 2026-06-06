@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pushgateway
+  namespace: monitoring
+  annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
+    konghq.com/strip-path: "false"
+spec:
+  ingressClassName: kong
+  rules:
+    - host: pushgateway.infrastructurepath.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-pushgateway
+                port:
+                  number: 9091

@@ -136,3 +136,11 @@ spec:
       kind: "*"
     - group: "opentelemetry.io"
       kind: "*"
+
+  roles:
+    - name: ci-deployer
+      description: CI/CD pipeline role — sync and get applications only
+      policies:
+        - p, proj:intelliops:ci-deployer, applications, sync, intelliops/*, allow
+        - p, proj:intelliops:ci-deployer, applications, get, intelliops/*, allow
+      jwtTokens: []

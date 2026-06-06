@@ -9,7 +9,7 @@ serviceMonitor:
   enabled: true
   namespace: monitoring
   additionalLabels:
-    release: kube-prometheus-stack
+    release: prometheus
 
 resources:
   requests:

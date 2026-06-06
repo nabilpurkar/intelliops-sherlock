@@ -1,6 +1,6 @@
 name: CI — Platform
 
-# Platform repo pipeline: secret scanning + IaC security scan + unit tests.
+# Platform repo pipeline: secret scanning + SAST + SCA + SonarQube + IaC + unit tests.
 # Service and AIOps builds run in their own repos and dispatch back here
 # via repository_dispatch → _manifest-update.yml.
 
@@ -40,21 +40,52 @@ jobs:
               - 'k8s/**'
               - '.github/workflows/**'
 
-  # ── Stage 1: Secret scanning (always, parallel with detect-changes) ──────────
+  # ── Stage 1: Secret scanning (always, parallel) ───────────────────────────────
   gitleaks:
     uses: ./.github/workflows/_gitleaks.yml
     permissions:
       contents: read
 
-  # ── Stage 2a: Unit tests (when services/ changed) ─────────────────────────────
+  # ── Stage 2: SAST — Semgrep (always, after gitleaks) ─────────────────────────
+  sast:
+    needs: [gitleaks]
+    uses: ./.github/workflows/_sast.yml
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      contents: read
+      security-events: write
+
+  # ── Stage 3a: Unit tests (when services/ changed) ─────────────────────────────
   unit-tests:
-    needs: [detect-changes]
+    needs: [detect-changes, gitleaks]
     if: needs.detect-changes.outputs.services == 'true'
     uses: ./.github/workflows/_unit-tests.yml
     permissions:
       contents: read
 
-  # ── Stage 2b: IaC scan (when terraform/ changed) ─────────────────────────────
+  # ── Stage 3b: SCA — Trivy + OWASP Dependency-Check (always) ─────────────────
+  sca:
+    needs: [gitleaks]
+    uses: ./.github/workflows/_sca.yml
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      contents: read
+      security-events: write
+
+  # ── Stage 4: SonarQube code quality gate (after unit tests produce coverage) ──
+  sonarqube:
+    needs: [sast, sca]
+    if: always() && needs.sast.result != 'failure'
+    uses: ./.github/workflows/_sonarqube.yml
+    secrets:
+      sonar_token:        ${{ secrets.SONAR_TOKEN }}
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      contents: read
+
+  # ── Stage 3c: IaC scan (when terraform/ changed) ─────────────────────────────
   iac-scan:
     needs: [detect-changes, gitleaks]
     if: needs.detect-changes.outputs.terraform == 'true'
