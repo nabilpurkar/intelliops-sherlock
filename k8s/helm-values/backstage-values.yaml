@@ -30,6 +30,11 @@ backstage:
         secretKeyRef:
           name: backstage-github-token
           key: GITHUB_TOKEN
+    - name: BACKSTAGE_DB_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: backstage-postgresql-secret
+          key: postgresql-password
     - name: NODE_ENV
       value: production
     - name: LOG_LEVEL
@@ -52,8 +57,16 @@ backstage:
         methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
         credentials: true
       database:
-        client: better-sqlite3
-        connection: ":memory:"
+        client: pg
+        connection:
+          host: postgresql.database.svc.cluster.local
+          port: 5432
+          user: backstage
+          password:
+            $env: BACKSTAGE_DB_PASSWORD
+          database: backstage
+          ssl:
+            rejectUnauthorized: false
       auth:
         dangerouslyDisableDefaultAuthPolicy: true
 

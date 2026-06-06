@@ -1,3 +1,4 @@
+from __future__ import annotations
 import random, time, threading
 from fastapi import FastAPI, Query
 from starlette.middleware.base import BaseHTTPMiddleware

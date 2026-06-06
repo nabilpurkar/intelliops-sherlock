@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kong
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: intelliops
+  sources:
+    - repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
+      path: k8s/helm-charts/kong
+      targetRevision: main
+      helm:
+        valueFiles:
+          - $values/k8s/helm-values/kong-values.yaml
+    - repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
+      ref: values
+      targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kong
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

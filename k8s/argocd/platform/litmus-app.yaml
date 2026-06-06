@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: litmus
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: intelliops
+  sources:
+    - repoURL: https://litmuschaos.github.io/litmus-helm/
+      chart: litmus
+      targetRevision: "3.20.0"
+      helm:
+        valueFiles:
+          - $values/k8s/helm-values/litmus-values.yaml
+    - repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
+      ref: values
+      targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: litmus
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

@@ -174,24 +174,37 @@ if ! _sm_has_value "intelliops/dev/postgresql" "postgres_password"; then
   SQ=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
   KG=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
   DJ=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
+  BS=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
   SQ_MON=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)
   _sm_put "intelliops/dev/postgresql" \
-    "{\"postgres_password\":\"${PG}\",\"sonarqube_password\":\"${SQ}\",\"kong_password\":\"${KG}\",\"defectdojo_password\":\"${DJ}\",\"sonarqube_monitoring_passcode\":\"${SQ_MON}\"}"
+    "{\"postgres_password\":\"${PG}\",\"sonarqube_password\":\"${SQ}\",\"kong_password\":\"${KG}\",\"defectdojo_password\":\"${DJ}\",\"backstage_password\":\"${BS}\",\"sonarqube_monitoring_passcode\":\"${SQ_MON}\"}"
   success "intelliops/dev/postgresql seeded"
 else
-  # Ensure sonarqube_monitoring_passcode exists (added later — backfill if missing)
+  # Back-fill any keys added after initial seed
+  _needs_backfill=0
   if ! _sm_has_value "intelliops/dev/postgresql" "sonarqube_monitoring_passcode"; then
-    info "Back-filling sonarqube_monitoring_passcode in intelliops/dev/postgresql ..."
+    _needs_backfill=1
+  fi
+  if ! _sm_has_value "intelliops/dev/postgresql" "backstage_password"; then
+    _needs_backfill=1
+  fi
+  if [ "${_needs_backfill}" -eq 1 ]; then
+    info "Back-filling missing keys in intelliops/dev/postgresql ..."
     CURRENT_PG=$(aws secretsmanager get-secret-value \
       --secret-id intelliops/dev/postgresql --region "${REGION}" \
       --query SecretString --output text)
     SQ_MON=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)
+    BS=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)
     UPDATED_PG=$(echo "${CURRENT_PG}" | python3 -c \
-      "import sys,json; d=json.load(sys.stdin); d['sonarqube_monitoring_passcode']='${SQ_MON}'; print(json.dumps(d))")
+      "import sys,json; d=json.load(sys.stdin); \
+       d.setdefault('sonarqube_monitoring_passcode','${SQ_MON}'); \
+       d.setdefault('backstage_password','${BS}'); \
+       print(json.dumps(d))")
     _sm_put "intelliops/dev/postgresql" "${UPDATED_PG}"
-    success "sonarqube_monitoring_passcode back-filled"
+    success "intelliops/dev/postgresql back-filled"
+  else
+    info "intelliops/dev/postgresql — already has values"
   fi
-  info "intelliops/dev/postgresql — already has values"
 fi
 
 # ── defectdojo ──────────────────────────────────────────────────────────────
@@ -483,116 +496,53 @@ is_done "11" || {
   mark_done "11"
 }
 
-# ─── 12. kube-prometheus-stack ───────────────────────────────────────────────
-step "12/28  kube-prometheus-stack"
+# ─── 12. ArgoCD pre-requisites — secrets that must exist before apps sync ─────
+step "12/28  ArgoCD pre-requisites"
 is_done "12" || {
-  helm_install kube-prometheus-stack monitoring \
-    "${CHARTS}/kube-prometheus-stack" \
-    -f "${VALUES}/kube-prometheus-values.yaml" \
-    --timeout 10m
+  # LitmusChaos: MongoDB credentials secret (chart reads this at startup)
+  kubectl create namespace litmus --dry-run=client -o yaml | kubectl apply -f -
+  if ! kubectl get secret litmus-mongodb-secret -n litmus &>/dev/null; then
+    info "Creating litmus-mongodb-secret from SM (intelliops/dev/litmus) ..."
+    LITMUS_JSON=$(aws secretsmanager get-secret-value \
+      --secret-id intelliops/dev/litmus --region "${REGION}" \
+      --query SecretString --output text)
+    LITMUS_MONGO_PASS=$(echo "${LITMUS_JSON}" | python3 -c \
+      "import sys,json; print(json.load(sys.stdin)['mongodb_root_password'])")
+    kubectl create secret generic litmus-mongodb-secret -n litmus \
+      --from-literal=mongodb-root-password="${LITMUS_MONGO_PASS}" \
+      --from-literal=mongodb-passwords="${LITMUS_MONGO_PASS}" \
+      --from-literal=mongodb-replica-set-key="$(openssl rand -base64 32)" \
+      --from-literal=mongodb-metrics-password="$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)"
+    success "litmus-mongodb-secret created"
+  else
+    warn "litmus-mongodb-secret already exists — skipping"
+  fi
+
+  # Backstage: ExternalSecrets (GitHub token + PostgreSQL credentials)
+  kubectl create namespace backstage --dry-run=client -o yaml | kubectl apply -f -
+  info "Applying Backstage ExternalSecrets ..."
+  kubectl apply -f "${MANIFESTS}/backstage-secret.yaml"
+
   mark_done "12"
 }
 
-# ─── 12b. Patch Grafana datasource ConfigMap (add lokiSearch link Tempo→Loki) ─
-step "12b/28  grafana-datasource-patch"
+# ─── 12b. Cleanup orphaned loki-promtail DaemonSet from old loki-stack chart ─
+step "12b/28  cleanup-loki-stack-promtail"
 is_done "12b" || {
-  # kube-prometheus-stack upgrade is blocked by Kyverno on its admission Job hooks.
-  # Patch the ConfigMap directly instead of re-running helm upgrade.
-  CM=$(kubectl get configmap -n monitoring -o name 2>/dev/null | grep grafana-datasource | head -1)
-  if [ -n "${CM}" ]; then
-    PATCH_NEEDED=$(kubectl get "${CM}" -n monitoring \
-      -o jsonpath='{.data.datasource\.yaml}' 2>/dev/null | grep -c "lokiSearch" || true)
-    if [ "${PATCH_NEEDED}" = "0" ]; then
-      info "Patching Grafana datasource ConfigMap to add lokiSearch for Tempo..."
-      kubectl get "${CM}" -n monitoring -o json | \
-        python3 -c "
-import sys, json, re
-d = json.load(sys.stdin)
-yaml_str = d['data']['datasource.yaml']
-# Insert lokiSearch after nodeGraph block
-yaml_str = yaml_str.replace(
-  'nodeGraph:\n      enabled: true',
-  'lokiSearch:\n      datasourceUid: Loki\n    nodeGraph:\n      enabled: true'
-)
-d['data']['datasource.yaml'] = yaml_str
-print(json.dumps(d))
-" | kubectl apply -f - 2>&1
-      success "Grafana datasource ConfigMap patched with lokiSearch"
-    else
-      warn "Grafana datasource ConfigMap already has lokiSearch — skipping patch"
-    fi
-  fi
-  mark_done "12b"
-}
-
-# ─── 13. loki ────────────────────────────────────────────────────────────────
-step "13/28  loki"
-is_done "13" || {
-  helm_install loki monitoring \
-    "${CHARTS}/loki" \
-    -f "${VALUES}/loki-values.yaml"
-  mark_done "13"
-}
-
-# ─── 13a. cleanup orphaned loki-promtail DaemonSet from old loki-stack chart ─
-step "13a/28  cleanup-loki-stack-promtail"
-is_done "13a" || {
   if kubectl get daemonset loki-promtail -n monitoring &>/dev/null; then
     info "Removing orphaned loki-promtail DaemonSet from old loki-stack chart..."
     kubectl delete daemonset loki-promtail -n monitoring 2>&1 || true
     success "loki-promtail DaemonSet removed"
   fi
-  mark_done "13a"
+  mark_done "12b"
 }
 
-# ─── 13b. promtail ───────────────────────────────────────────────────────────
-step "13b/28  promtail"
-is_done "13b" || {
-  helm_install promtail monitoring \
-    "${CHARTS}/promtail" \
-    -f "${VALUES}/promtail-values.yaml"
-  mark_done "13b"
-}
-
-# ─── 14. tempo ───────────────────────────────────────────────────────────────
-step "14/28  tempo"
-is_done "14" || {
-  helm_install tempo monitoring \
-    "${CHARTS}/tempo" \
-    -f "${VALUES}/tempo-values.yaml"
-  mark_done "14"
-}
-
-# ─── 15. otel-collector ──────────────────────────────────────────────────────
-step "15/28  otel-collector"
-is_done "15" || {
-  helm_install otel-collector monitoring \
-    "${CHARTS}/opentelemetry-collector" \
-    -f "${VALUES}/otel-collector-values.yaml"
-  mark_done "15"
-}
-
-# ─── 15b. OpenTelemetry Operator (Python auto-instrumentation via annotation) ─
-step "15b/28  opentelemetry-operator"
-is_done "15b" || {
-  helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts 2>/dev/null || true
-  helm repo update open-telemetry 2>/dev/null || true
-  helm_install opentelemetry-operator monitoring \
-    open-telemetry/opentelemetry-operator \
-    -f "${VALUES}/otel-operator-values.yaml" \
-    --timeout 5m
-  success "OpenTelemetry Operator installed — pods with inject-python annotation will be auto-instrumented"
-  mark_done "15b"
-}
-
-# ─── 16. kong ────────────────────────────────────────────────────────────────
-step "16/28  kong"
-is_done "16" || {
-  helm_install kong kong \
-    "${CHARTS}/kong" \
-    -f "${VALUES}/kong-values.yaml"
-  mark_done "16"
-}
+# ─── 13–16. Placeholder — helm installs replaced by ArgoCD (see 16c) ─────────
+# Steps 13/13a/13b/14/15/15b/16 are handled by ArgoCD Applications below.
+# Marking done immediately so checkpoint/resume skips them on re-runs.
+for _s in 13 13a 13b 14 15 15b 16; do
+  is_done "${_s}" || mark_done "${_s}"
+done
 
 # ─── 16b. Kong IngressClass + ingress routes ─────────────────────────────────
 step "16b/28  Kong IngressClass + service ingresses"
@@ -614,110 +564,104 @@ is_done "16b" || {
   kubectl apply -f "${INGRESS}/ingress-kong-admin.yaml"
   kubectl apply -f "${INGRESS}/ingress-defectdojo.yaml"
   kubectl apply -f "${INGRESS}/ingress-falco.yaml"
+  kubectl apply -f "${INGRESS}/ingress-backstage.yaml"
 
   success "IngressClass and all service ingresses applied"
   mark_done "16b"
 }
 
-# ─── 16c. ArgoCD AppProject + Applications ────────────────────────────────────
-step "16c/28  ArgoCD AppProject + Applications"
+# ─── 16c. ArgoCD AppProject + ALL Applications ────────────────────────────────
+# All Helm-based tools (monitoring, security, platform) are now managed by ArgoCD.
+# ArgoCD uses sync waves (annotations) to deploy in the correct order:
+#   wave 0: kyverno, gatekeeper (security baseline)
+#   wave 1: prometheus, loki, tempo, otel-collector, falco, kong
+#   wave 2: promtail, otel-operator, pushgateway, sonarqube, defectdojo
+#   wave 3: opencost, backstage, litmus
+step "16c/28  ArgoCD AppProject + ALL Applications"
 is_done "16c" || {
   info "Applying ArgoCD AppProject ..."
   kubectl apply -f "${REPO_ROOT}/k8s/argocd/project.yaml"
 
-  info "Applying ArgoCD Applications (microservices + locust) ..."
+  info "Applying monitoring Applications ..."
+  kubectl apply -Rf "${REPO_ROOT}/k8s/argocd/monitoring/"
+
+  info "Applying security Applications ..."
+  kubectl apply -Rf "${REPO_ROOT}/k8s/argocd/security/"
+
+  info "Applying platform Applications ..."
+  kubectl apply -Rf "${REPO_ROOT}/k8s/argocd/platform/"
+
+  info "Applying workload Applications (microservices, AIOps, Locust) ..."
   kubectl apply -f "${REPO_ROOT}/k8s/argocd/microservices-app.yaml"
+  kubectl apply -f "${REPO_ROOT}/k8s/argocd/aiops-app.yaml"
   kubectl apply -f "${REPO_ROOT}/k8s/argocd/locust-app.yaml"
 
-  success "ArgoCD Applications registered — they will sync k8s/apps/ and k8s/load-generator/ automatically"
+  success "All ArgoCD Applications registered — syncing asynchronously via sync waves"
+  info "Monitor sync status: kubectl get applications -n argocd"
+  info "Or: argocd app list (if argocd CLI is installed)"
   mark_done "16c"
 }
 
-# Locust probe: removed from git manifest (k8s/load-generator/deployment.yaml)
-# ArgoCD syncs the correct no-probe spec — no post-deploy patch needed
-
-# ─── 17. falco ───────────────────────────────────────────────────────────────
-step "17/28  falco"
+# ─── 17. Kyverno policies — apply after CRDs are established by ArgoCD ───────
+step "17/28  kyverno-policies"
 is_done "17" || {
-  helm_install falco falco \
-    "${CHARTS}/falco" \
-    -f "${VALUES}/falco-values.yaml"
+  info "Waiting for Kyverno ClusterPolicy CRD (ArgoCD syncing — up to 5 min) ..."
+  kubectl wait --for=condition=established \
+    crd/clusterpolicies.kyverno.io --timeout=5m 2>/dev/null || {
+    warn "Kyverno CRD not ready in 5 min — applying policies anyway (will retry if ArgoCD re-syncs)"
+  }
+  info "Applying Kyverno policies ..."
+  kubectl apply -f "${REPO_ROOT}/k8s/kyverno-policies/"
+  success "Kyverno policies applied"
   mark_done "17"
 }
 
-# ─── 18. sonarqube ───────────────────────────────────────────────────────────
-step "18/28  sonarqube"
-is_done "18" || {
-  helm_install sonarqube sonarqube \
-    "${CHARTS}/sonarqube" \
-    -f "${VALUES}/sonarqube-values.yaml" \
-    --timeout 10m
-  mark_done "18"
-}
+# ─── 18–23. Placeholder — helm installs replaced by ArgoCD (see 16c) ─────────
+for _s in 18 19 22 23; do
+  is_done "${_s}" || mark_done "${_s}"
+done
 
-# ─── 19. defectdojo ──────────────────────────────────────────────────────────
-step "19/28  defectdojo"
+# ─── 19. DefectDojo PostgreSQL readiness check — wait before policies apply ──
+# (DefectDojo ArgoCD app needs PG ready; we wait here so policies don't block it)
+step "19/28  defectdojo-pg-readiness"
 is_done "19" || {
-  # Wait for PostgreSQL to be fully accepting connections (not just Running)
   info "Waiting for PostgreSQL to accept connections (poll up to 3 min) ..."
   PG_READY=0
   for _i in $(seq 1 18); do
     if kubectl exec -n database postgresql-0 -- \
-        env PGPASSWORD="$(kubectl get secret postgresql-credentials -n database -o jsonpath='{.data.postgres-password}' | base64 -d)" \
+        env PGPASSWORD="$(kubectl get secret postgresql-credentials -n database \
+          -o jsonpath='{.data.postgres-password}' | base64 -d)" \
         psql -U postgres -c "SELECT 1;" &>/dev/null 2>&1; then
       PG_READY=1; break
     fi
     sleep 10
   done
-  [ "${PG_READY}" -eq 1 ] || die "PostgreSQL not ready after 3 min — cannot install DefectDojo"
-  success "PostgreSQL is ready"
-
-  helm_install defectdojo defectdojo \
-    "${CHARTS}/defectdojo" \
-    -f "${VALUES}/defectdojo-values.yaml" \
-    --timeout 15m
+  if [ "${PG_READY}" -eq 1 ]; then
+    success "PostgreSQL is ready — DefectDojo/SonarQube/Backstage ArgoCD apps can proceed"
+  else
+    warn "PostgreSQL not confirmed ready — DefectDojo may retry; check ArgoCD app status"
+  fi
   mark_done "19"
 }
 
-# ─── 20. kyverno ─────────────────────────────────────────────────────────────
-step "20/28  kyverno"
-is_done "20" || {
-  helm_install kyverno kyverno \
-    "${CHARTS}/kyverno-3.8.1.tgz" \
-    -f "${VALUES}/kyverno-values.yaml"
-
-  info "Applying Kyverno policies ..."
-  kubectl apply -f "${REPO_ROOT}/k8s/kyverno-policies/"
-  success "Kyverno policies applied"
-  mark_done "20"
-}
-
-# ─── 21. gatekeeper (OPA) ────────────────────────────────────────────────────
-step "21/28  gatekeeper (OPA)"
+# ─── 21. Gatekeeper constraints — apply after CRDs are established by ArgoCD ─
+step "21/28  gatekeeper-constraints"
 is_done "21" || {
-  helm_install gatekeeper gatekeeper-system \
-    "${CHARTS}/gatekeeper-3.22.2.tgz" \
-    -f "${VALUES}/gatekeeper-values.yaml"
-
-  info "Waiting for Gatekeeper webhook to be ready (poll up to 3 min) ..."
-  for _i in $(seq 1 18); do
-    ready=$(kubectl get pods -n gatekeeper-system --no-headers 2>/dev/null \
-      | grep -c "Running" || true)
-    info "  [${_i}/18] Gatekeeper pods Running: ${ready}"
-    [ "${ready}" -ge 2 ] && break
-    sleep 10
-  done
+  info "Waiting for Gatekeeper ConstraintTemplate CRD (ArgoCD syncing — up to 5 min) ..."
+  kubectl wait --for=condition=established \
+    crd/constrainttemplates.templates.gatekeeper.sh --timeout=5m 2>/dev/null || {
+    warn "Gatekeeper CRD not ready in 5 min — applying templates anyway"
+  }
 
   info "Applying Gatekeeper ConstraintTemplates ..."
   kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-template.yaml"
   kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-template.yaml"
 
-  info "Waiting for Gatekeeper CRDs to be established ..."
-  for _i in $(seq 1 18); do
+  info "Waiting for ConstraintTemplate CRDs to be established ..."
+  for _i in $(seq 1 12); do
     ready=$(kubectl get crd 2>/dev/null \
-      | grep -c "constrainttemplates\|allowedregistries\|requirelabels" || true)
-    info "  [${_i}/18] Gatekeeper CRDs ready: ${ready}"
-    [ "${ready}" -ge 1 ] && break
+      | grep -c "allowedregistries\|requirelabels" || true)
+    [ "${ready}" -ge 2 ] && break
     sleep 10
   done
 
@@ -726,31 +670,6 @@ is_done "21" || {
   kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-constraint.yaml"
   success "Gatekeeper constraints applied"
   mark_done "21"
-}
-
-# ─── 22. Prometheus Pushgateway (DORA metrics receiver) ──────────────────────
-step "22/28  prometheus-pushgateway (DORA metrics)"
-is_done "22" || {
-  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
-  helm repo update prometheus-community 2>/dev/null || true
-  helm_install prometheus-pushgateway monitoring \
-    prometheus-community/prometheus-pushgateway \
-    -f "${VALUES}/pushgateway-values.yaml"
-  success "Pushgateway installed — CI will push DORA metrics here after each deployment"
-  info "Add secret PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091 to GitHub"
-  mark_done "22"
-}
-
-# ─── 23. OpenCost (Kubernetes cost monitoring) ────────────────────────────────
-step "23/28  opencost (FinOps)"
-is_done "23" || {
-  helm repo add opencost https://opencost.github.io/opencost-helm-chart 2>/dev/null || true
-  helm repo update opencost 2>/dev/null || true
-  helm_install opencost monitoring \
-    opencost/opencost \
-    -f "${VALUES}/opencost-values.yaml"
-  success "OpenCost installed — cost metrics available in Grafana cost dashboard"
-  mark_done "23"
 }
 
 # ─── 24. Application SLOs + Error Budget rules ────────────────────────────────
@@ -774,65 +693,46 @@ is_done "25" || {
   mark_done "25"
 }
 
-# ─── 26. Backstage IDP ────────────────────────────────────────────────────────
-step "26/28  Backstage IDP"
-is_done "26" || {
-  info "Adding backstage helm repo ..."
-  helm repo add backstage https://backstage.github.io/charts 2>/dev/null || true
-  helm repo update backstage 2>/dev/null || true
+# ─── 26–27. Placeholder — backstage/litmus handled by ArgoCD (see 16c) ───────
+# Backstage: ArgoCD backstage-app.yaml; ExternalSecrets applied in step 12
+# LitmusChaos: ArgoCD litmus-app.yaml; MongoDB secret created in step 12
+for _s in 26 27; do
+  is_done "${_s}" || {
+    info "Step ${_s}: managed by ArgoCD — skipping helm install"
+    mark_done "${_s}"
+  }
+done
 
-  info "Applying Backstage ExternalSecret (reads intelliops/dev/backstage → github_token) ..."
-  kubectl apply -f "${MANIFESTS}/backstage-secret.yaml"
-
-  info "Installing Backstage ..."
-  helm_install backstage backstage \
-    backstage/backstage \
-    -f "${VALUES}/backstage-values.yaml" \
-    --timeout 5m
-
-  info "Applying Backstage ingress ..."
-  kubectl apply -f "${INGRESS}/ingress-backstage.yaml"
-  success "Backstage installed — https://backstage.infrastructurepath.online (may take 2–3 min to initialise)"
-  info "Populate intelliops/dev/backstage → github_token in AWS SM before ExternalSecret can sync"
-  mark_done "26"
-}
-
-# ─── 27. LitmusChaos ─────────────────────────────────────────────────────────
-step "27/28  LitmusChaos (chaos engineering)"
-is_done "27" || {
-  info "Adding litmuschaos helm repo ..."
-  helm repo add litmuschaos https://litmuschaos.github.io/litmus-helm/ 2>/dev/null || true
-  helm repo update litmuschaos 2>/dev/null || true
-
-  # Create MongoDB credentials k8s secret from SM so nothing is hardcoded in values
-  if ! kubectl get secret litmus-mongodb-secret -n litmus &>/dev/null; then
-    info "Creating litmus-mongodb-secret from SM (intelliops/dev/litmus) ..."
-    LITMUS_JSON=$(aws secretsmanager get-secret-value \
-      --secret-id intelliops/dev/litmus --region "${REGION}" \
-      --query SecretString --output text)
-    LITMUS_MONGO_PASS=$(echo "${LITMUS_JSON}" | python3 -c \
-      "import sys,json; print(json.load(sys.stdin)['mongodb_root_password'])")
-    LITMUS_MONGO_USER=$(echo "${LITMUS_JSON}" | python3 -c \
-      "import sys,json; print(json.load(sys.stdin)['mongodb_root_user'])")
-    kubectl create secret generic litmus-mongodb-secret -n litmus \
-      --from-literal=mongodb-root-password="${LITMUS_MONGO_PASS}" \
-      --from-literal=mongodb-passwords="${LITMUS_MONGO_PASS}" \
-      --from-literal=mongodb-replica-set-key="$(openssl rand -base64 32)" \
-      --from-literal=mongodb-metrics-password="$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)"
-    success "litmus-mongodb-secret created"
+# ─── 12b-post. Patch Grafana datasource ConfigMap (lokiSearch Tempo→Loki) ─────
+# Runs after ArgoCD has had time to deploy prometheus stack (async — best effort)
+step "12b-post/28  grafana-datasource-patch"
+is_done "12b-post" || {
+  CM=$(kubectl get configmap -n monitoring -o name 2>/dev/null | grep grafana-datasource | head -1)
+  if [ -n "${CM}" ]; then
+    PATCH_NEEDED=$(kubectl get "${CM}" -n monitoring \
+      -o jsonpath='{.data.datasource\.yaml}' 2>/dev/null | grep -c "lokiSearch" || true)
+    if [ "${PATCH_NEEDED}" = "0" ]; then
+      info "Patching Grafana datasource ConfigMap to add lokiSearch for Tempo..."
+      kubectl get "${CM}" -n monitoring -o json | \
+        python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+yaml_str = d['data']['datasource.yaml']
+yaml_str = yaml_str.replace(
+  'nodeGraph:\n      enabled: true',
+  'lokiSearch:\n      datasourceUid: Loki\n    nodeGraph:\n      enabled: true'
+)
+d['data']['datasource.yaml'] = yaml_str
+print(json.dumps(d))
+" | kubectl apply -f - 2>&1
+      success "Grafana datasource ConfigMap patched with lokiSearch"
+    else
+      warn "Grafana datasource ConfigMap already has lokiSearch — skipping"
+    fi
   else
-    warn "litmus-mongodb-secret already exists — skipping"
+    warn "Grafana datasource ConfigMap not found yet — ArgoCD may still be syncing"
   fi
-
-  helm_install litmus litmus \
-    litmuschaos/litmus \
-    -f "${VALUES}/litmus-values.yaml" \
-    --timeout 5m
-
-  success "LitmusChaos installed — portal at http://localhost:9091 (port-forward: kubectl port-forward svc/litmus-frontend-service 9091:9091 -n litmus)"
-  info "Chaos experiments: ${REPO_ROOT}/aiops/chaos/"
-  info "Apply experiments ONLY when deliberately running chaos: kubectl apply -f aiops/chaos/<experiment>.yaml"
-  mark_done "27"
+  mark_done "12b-post"
 }
 
 # ─── 28. AIOps workloads (namespace + config + deployments) ──────────────────

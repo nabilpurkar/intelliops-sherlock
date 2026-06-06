@@ -27,7 +27,7 @@ on:
         required: false
 
 env:
-  DEFECTDOJO_URL: https://defectdojo.infrastructurepath.online
+  DEFECTDOJO_URL: ${{ vars.DEFECTDOJO_URL || 'https://defectdojo.infrastructurepath.online' }}
 
 permissions:
   id-token: write

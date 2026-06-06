@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sonarqube
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: intelliops
+  sources:
+    - repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
+      path: k8s/helm-charts/sonarqube
+      targetRevision: main
+      helm:
+        valueFiles:
+          - $values/k8s/helm-values/sonarqube-values.yaml
+    - repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
+      ref: values
+      targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sonarqube
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

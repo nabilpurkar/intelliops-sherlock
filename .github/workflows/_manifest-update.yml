@@ -68,7 +68,7 @@ jobs:
           SERVICE:       ${{ steps.vars.outputs.service }}
           IMAGE_TAG:     ${{ steps.vars.outputs.image_tag }}
           MANIFEST_PATH: ${{ steps.vars.outputs.manifest_path }}
-          REGISTRY: 007066145518.dkr.ecr.us-east-1.amazonaws.com
+          REGISTRY: ${{ github.event.client_payload.aws_account_id || vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ github.event.client_payload.aws_region || vars.AWS_REGION || 'us-east-1' }}.amazonaws.com
         run: |
           manifest="${MANIFEST_PATH}/${SERVICE}.yaml"
           [ -f "${manifest}" ] || { echo "ERROR: manifest not found: ${manifest}"; exit 1; }

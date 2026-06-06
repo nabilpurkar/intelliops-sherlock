@@ -1,0 +1,74 @@
+- rule: Unexpected outbound connection from service pod
+  desc: A microservice pod made an outbound connection to an unexpected destination
+  condition: >
+    outbound and container and
+    k8s.ns.name in (apps, aiops-demo) and
+    not fd.sport in (80, 443, 4317, 4318, 9090, 9093, 3100, 9411)
+  output: >
+    Unexpected outbound from service pod
+    (pod=%k8s.pod.name ns=%k8s.ns.name image=%container.image.repository
+    dst=%fd.rip:%fd.rport proto=%fd.proto)
+  priority: WARNING
+  tags: [network, microservice, intelliops]
+
+- rule: Sensitive file read in container
+  desc: A process inside a container read a sensitive file
+  condition: >
+    open_read and container and
+    fd.name in (/etc/shadow, /etc/passwd, /proc/self/environ, /root/.ssh/id_rsa,
+                /root/.aws/credentials, /var/run/secrets/kubernetes.io/serviceaccount/token)
+  output: >
+    Sensitive file accessed in container
+    (pod=%k8s.pod.name ns=%k8s.ns.name file=%fd.name cmd=%proc.cmdline image=%container.image.repository)
+  priority: CRITICAL
+  tags: [filesystem, credentials, intelliops]
+
+- rule: Shell spawned in service container
+  desc: A shell was executed inside a microservice or AIOps container
+  condition: >
+    spawned_process and container and
+    k8s.ns.name in (apps, aiops-demo) and
+    proc.name in (bash, sh, dash, zsh, ksh, fish)
+  output: >
+    Shell spawned in service container
+    (pod=%k8s.pod.name ns=%k8s.ns.name shell=%proc.name parent=%proc.pname image=%container.image.repository)
+  priority: WARNING
+  tags: [process, shell, intelliops]
+
+- rule: Crypto mining activity detected
+  desc: Detected indicators of cryptocurrency mining in a container
+  condition: >
+    spawned_process and container and
+    (proc.name in (xmrig, minerd, cpuminer, cgminer, bfgminer, ethminer) or
+     proc.cmdline contains "stratum+tcp" or proc.cmdline contains "pool.minexmr")
+  output: >
+    Crypto miner detected
+    (pod=%k8s.pod.name ns=%k8s.ns.name cmd=%proc.cmdline image=%container.image.repository)
+  priority: CRITICAL
+  tags: [cryptomining, malware, intelliops]
+
+- rule: Container running as root unexpectedly
+  desc: A container process is running as root when it should not be
+  condition: >
+    container and
+    k8s.ns.name in (apps, aiops-demo, monitoring) and
+    user.uid = 0 and
+    not proc.name in (pause, containerd-shim)
+  output: >
+    Container process running as root
+    (pod=%k8s.pod.name ns=%k8s.ns.name proc=%proc.name image=%container.image.repository)
+  priority: WARNING
+  tags: [privilege, container, intelliops]
+
+- rule: Unexpected write to /tmp in service container
+  desc: A process wrote to /tmp in a microservice container — may indicate exploit staging
+  condition: >
+    open_write and container and
+    k8s.ns.name = apps and
+    fd.name startswith /tmp/ and
+    not proc.name in (python3, pip, gunicorn)
+  output: >
+    Unexpected /tmp write in service container
+    (pod=%k8s.pod.name ns=%k8s.ns.name file=%fd.name proc=%proc.name image=%container.image.repository)
+  priority: WARNING
+  tags: [filesystem, intelliops]

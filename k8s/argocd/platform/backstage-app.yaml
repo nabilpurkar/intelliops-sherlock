@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backstage
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: intelliops
+  sources:
+    - repoURL: https://backstage.github.io/charts
+      chart: backstage
+      targetRevision: "2.4.1"
+      helm:
+        valueFiles:
+          - $values/k8s/helm-values/backstage-values.yaml
+    - repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
+      ref: values
+      targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backstage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

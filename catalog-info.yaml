@@ -125,6 +125,83 @@ spec:
 
 ---
 apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: anomaly-detector
+  description: ML anomaly detection — monitors Prometheus metrics and publishes anomalies to SQS
+  tags:
+    - aiops
+    - machine-learning
+    - python
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-sherlock
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: forecaster
+  description: Time-series forecasting CronJob — predicts traffic patterns for proactive scaling
+  tags:
+    - aiops
+    - machine-learning
+    - python
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-sherlock
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: alert-correlator
+  description: Alert correlation engine — deduplicates and groups related Prometheus alerts
+  tags:
+    - aiops
+    - alerting
+    - python
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-sherlock
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8081"
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ai-agent
+  description: Claude Bedrock AI agent — root-cause analysis and Slack-based auto-remediation
+  tags:
+    - aiops
+    - generative-ai
+    - bedrock
+    - python
+  annotations:
+    github.com/project-slug: nabilpurkar/intelliops-sherlock
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: intelliops-sherlock
+
+---
+apiVersion: backstage.io/v1alpha1
 kind: Location
 metadata:
   name: intelliops-aiops-catalog

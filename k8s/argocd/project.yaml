@@ -10,6 +10,17 @@ spec:
 
   sourceRepos:
     - https://github.com/nabilpurkar/intelliops-sherlock.git
+    # External Helm repos for non-vendored charts
+    - https://prometheus-community.github.io/helm-charts
+    - https://grafana.github.io/helm-charts
+    - https://open-telemetry.github.io/opentelemetry-helm-charts
+    - https://falcosecurity.github.io/charts
+    - https://backstage.github.io/charts
+    - https://litmuschaos.github.io/litmus-helm
+    - https://opencost.github.io/opencost-helm-chart
+    - https://kyverno.github.io/kyverno/
+    - https://open-policy-agent.github.io/gatekeeper/charts
+    - '*'   # allow vendored charts from the same repo by wildcard
 
   destinations:
     - server: https://kubernetes.default.svc
@@ -18,29 +29,97 @@ spec:
       namespace: locust
     - server: https://kubernetes.default.svc
       namespace: aiops-demo
+    - server: https://kubernetes.default.svc
+      namespace: monitoring
+    - server: https://kubernetes.default.svc
+      namespace: falco
+    - server: https://kubernetes.default.svc
+      namespace: kyverno
+    - server: https://kubernetes.default.svc
+      namespace: gatekeeper-system
+    - server: https://kubernetes.default.svc
+      namespace: sonarqube
+    - server: https://kubernetes.default.svc
+      namespace: defectdojo
+    - server: https://kubernetes.default.svc
+      namespace: backstage
+    - server: https://kubernetes.default.svc
+      namespace: litmus
+    - server: https://kubernetes.default.svc
+      namespace: kong
 
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRole
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
+    - group: "apiextensions.k8s.io"
+      kind: CustomResourceDefinition
+    - group: "admissionregistration.k8s.io"
+      kind: ValidatingWebhookConfiguration
+    - group: "admissionregistration.k8s.io"
+      kind: MutatingWebhookConfiguration
+    - group: "policy"
+      kind: PodSecurityPolicy
+    - group: "kyverno.io"
+      kind: "*"
+    - group: "templates.gatekeeper.sh"
+      kind: ConstraintTemplate
+    - group: "constraints.gatekeeper.sh"
+      kind: "*"
+    - group: "monitoring.coreos.com"
+      kind: "*"
+    - group: "storage.k8s.io"
+      kind: StorageClass
+    - group: "networking.k8s.io"
+      kind: IngressClass
 
   namespaceResourceWhitelist:
     - group: "apps"
       kind: Deployment
+    - group: "apps"
+      kind: StatefulSet
+    - group: "apps"
+      kind: DaemonSet
     - group: ""
       kind: Service
     - group: ""
       kind: ServiceAccount
     - group: ""
       kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: ""
+      kind: Pod
     - group: "autoscaling"
       kind: HorizontalPodAutoscaler
     - group: "batch"
       kind: CronJob
+    - group: "batch"
+      kind: Job
     - group: "rbac.authorization.k8s.io"
       kind: Role
     - group: "rbac.authorization.k8s.io"
       kind: RoleBinding
     - group: "monitoring.coreos.com"
       kind: ServiceMonitor
+    - group: "monitoring.coreos.com"
+      kind: PrometheusRule
     - group: "networking.k8s.io"
       kind: NetworkPolicy
+    - group: "networking.k8s.io"
+      kind: Ingress
+    - group: "policy"
+      kind: PodDisruptionBudget
+    - group: "kyverno.io"
+      kind: "*"
+    - group: "templates.gatekeeper.sh"
+      kind: ConstraintTemplate
+    - group: "constraints.gatekeeper.sh"
+      kind: "*"
+    - group: "litmuschaos.io"
+      kind: "*"

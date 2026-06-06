@@ -1,6 +1,6 @@
 name: CI — Platform
 
-# Platform repo pipeline: secret scanning + IaC security scan.
+# Platform repo pipeline: secret scanning + IaC security scan + unit tests.
 # Service and AIOps builds run in their own repos and dispatch back here
 # via repository_dispatch → _manifest-update.yml.
 
@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       terraform: ${{ steps.filter.outputs.terraform }}
+      services:  ${{ steps.filter.outputs.services }}
+      k8s:       ${{ steps.filter.outputs.k8s }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -32,15 +34,27 @@ jobs:
           filters: |
             terraform:
               - 'terraform/**'
+            services:
+              - 'services/**'
+            k8s:
+              - 'k8s/**'
+              - '.github/workflows/**'
 
-  # ── Stage 1: Secret scanning (always) ────────────────────────────────────────
+  # ── Stage 1: Secret scanning (always, parallel with detect-changes) ──────────
   gitleaks:
-    needs: [detect-changes]
     uses: ./.github/workflows/_gitleaks.yml
     permissions:
       contents: read
 
-  # ── Stage 2: IaC scan (when terraform/ changed) ───────────────────────────────
+  # ── Stage 2a: Unit tests (when services/ changed) ─────────────────────────────
+  unit-tests:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.services == 'true'
+    uses: ./.github/workflows/_unit-tests.yml
+    permissions:
+      contents: read
+
+  # ── Stage 2b: IaC scan (when terraform/ changed) ─────────────────────────────
   iac-scan:
     needs: [detect-changes, gitleaks]
     if: needs.detect-changes.outputs.terraform == 'true'
