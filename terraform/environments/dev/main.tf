@@ -30,9 +30,9 @@ data "aws_route53_zone" "main" {
   private_zone = false
 }
 
-# ACM wildcard certificate for *.infrastructurepath.online — used by ALB ingress
+# ACM certificate for infrastructurepath.online (includes *.infrastructurepath.online SAN) — used by ALB ingress
 data "aws_acm_certificate" "wildcard" {
-  domain      = "*.infrastructurepath.online"
+  domain      = "infrastructurepath.online"
   statuses    = ["ISSUED"]
   most_recent = true
 }
