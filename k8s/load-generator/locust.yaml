@@ -80,7 +80,6 @@ spec:
                   name: locust-config
                   key: HOST
           args:
-            - locust
             - --locustfile
             - /home/locust/locustfile/locustfile.py
             - --host
