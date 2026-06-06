@@ -553,7 +553,7 @@ is_done "16b" || {
   info "Resolving ACM wildcard certificate ARN from AWS ..."
   ACM_CERT_ARN=$(aws acm list-certificates \
     --certificate-statuses ISSUED \
-    --query "CertificateSummaryList[?DomainName=='*.infrastructurepath.online'].CertificateArn|[0]" \
+    --query "CertificateSummaryList[?DomainName=='infrastructurepath.online'].CertificateArn|[0]" \
     --output text --region "${REGION}" 2>/dev/null || echo "")
   [ -n "${ACM_CERT_ARN}" ] && [ "${ACM_CERT_ARN}" != "None" ] \
     || die "ACM wildcard certificate for *.infrastructurepath.online not found — ensure it exists with ISSUED status"
