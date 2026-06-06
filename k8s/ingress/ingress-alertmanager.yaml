@@ -16,6 +16,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: kube-prometheus-stack-alertmanager
+                name: prometheus-kube-prometheus-alertmanager
                 port:
                   number: 9093
