@@ -27,7 +27,6 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
-        instrumentation.opentelemetry.io/inject-python: "true"
     spec:
       serviceAccountName: apps-sa
       securityContext:
@@ -36,7 +35,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: payment-service
-          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/payment-service:v1.0.0
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/payment-service:v1.1.0
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false

@@ -27,7 +27,6 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
-        instrumentation.opentelemetry.io/inject-python: "true"
     spec:
       serviceAccountName: apps-sa
       securityContext:
@@ -36,7 +35,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: order-service
-          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/order-service:v1.0.0
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/order-service:v1.1.0
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
@@ -68,9 +67,9 @@ spec:
             - name: OTEL_LOGS_EXPORTER
               value: "none"
             - name: INVENTORY_SERVICE_URL
-              value: "http://inventory-service.apps.svc.cluster.local:8001"
+              value: "http://inventory-service.apps.svc.cluster.local:8000"
             - name: PAYMENT_SERVICE_URL
-              value: "http://payment-service.apps.svc.cluster.local:8002"
+              value: "http://payment-service.apps.svc.cluster.local:8000"
           resources:
             requests:
               cpu: "100m"

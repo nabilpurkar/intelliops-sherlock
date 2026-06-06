@@ -1,10 +1,24 @@
 from __future__ import annotations
-import random, time, threading
+import os, random, time, threading
 from fastapi import FastAPI, Query
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+def _init_otel():
+    resource = Resource.create({SERVICE_NAME: os.getenv("OTEL_SERVICE_NAME", "payment-service")})
+    provider = TracerProvider(resource=resource)
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    trace.set_tracer_provider(provider)
+
+_init_otel()
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 REQUESTS        = Counter("payment_requests_total", "HTTP requests", ["method", "endpoint", "status"])
@@ -37,6 +51,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI(title="payment-service")
 app.add_middleware(MetricsMiddleware)
+FastAPIInstrumentor.instrument_app(app)
 
 # ── Core endpoints ────────────────────────────────────────────────────────────
 @app.get("/health")
