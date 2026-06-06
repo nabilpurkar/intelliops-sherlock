@@ -33,3 +33,11 @@ spec:
         duration: 30s
         factor: 2
         maxDuration: 5m
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      name: litmus-mongodb
+      jqPathExpressions:
+        - .spec.template.spec.containers[].resources
+        - .spec.volumeClaimTemplates[].apiVersion
+        - .spec.volumeClaimTemplates[].kind
