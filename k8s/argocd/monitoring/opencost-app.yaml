@@ -15,6 +15,8 @@ spec:
       valuesObject:
         opencost:
           prometheus:
+            internal:
+              enabled: false
             external:
               enabled: true
               url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090

@@ -8,9 +8,9 @@ metadata:
 spec:
   project: intelliops
   sources:
-    - repoURL: https://github.com/nabilpurkar/intelliops-sherlock.git
-      path: k8s/helm-charts/prometheus-pushgateway
-      targetRevision: main
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: prometheus-pushgateway
+      targetRevision: "2.14.0"
       helm:
         valueFiles:
           - $values/k8s/helm-values/pushgateway-values.yaml

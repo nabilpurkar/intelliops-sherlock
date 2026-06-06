@@ -19,7 +19,6 @@ spec:
     - https://litmuschaos.github.io/litmus-helm
     - https://opencost.github.io/opencost-helm-chart
     - https://kyverno.github.io/kyverno/
-    - https://open-policy-agent.github.io/gatekeeper/charts
     - '*'   # allow vendored charts from the same repo by wildcard
 
   destinations:
@@ -35,8 +34,6 @@ spec:
       namespace: falco
     - server: https://kubernetes.default.svc
       namespace: kyverno
-    - server: https://kubernetes.default.svc
-      namespace: gatekeeper-system
     - server: https://kubernetes.default.svc
       namespace: sonarqube
     - server: https://kubernetes.default.svc
@@ -78,10 +75,6 @@ spec:
     - group: "policy"
       kind: PodSecurityPolicy
     - group: "kyverno.io"
-      kind: "*"
-    - group: "templates.gatekeeper.sh"
-      kind: ConstraintTemplate
-    - group: "constraints.gatekeeper.sh"
       kind: "*"
     - group: "monitoring.coreos.com"
       kind: "*"
@@ -136,10 +129,6 @@ spec:
     - group: ""
       kind: LimitRange
     - group: "kyverno.io"
-      kind: "*"
-    - group: "templates.gatekeeper.sh"
-      kind: ConstraintTemplate
-    - group: "constraints.gatekeeper.sh"
       kind: "*"
     - group: "litmuschaos.io"
       kind: "*"
