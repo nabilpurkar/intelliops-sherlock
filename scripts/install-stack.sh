@@ -73,7 +73,7 @@ elif [ -n "${_FROM}" ]; then
   # Remove checkpoint entries for step _FROM and higher from the state file
   if [ -f "${STATE_FILE}" ]; then
     # Build ordered step list; remove entries at or after _FROM
-    _ORDERED=(0 1 2 3 4 5 6 7 8 9 9b 10 11 12 12b 13 13a 13b 14 15 15b 16 16b 16c 17 18 19 20 21 22 23 24 25 26 27 28)
+    _ORDERED=(0 1 2 3 4 5 6 7 8 9 9b 10 11 12 12b 13 13a 13b 14 15 15b 16 16b 16c 17 18 19 20 21 22 23 24 25 26 27 28 12b-post)
     _KEEP=()
     _DROP=false
     for _s in "${_ORDERED[@]}"; do
@@ -740,15 +740,15 @@ is_done "12b-post" || {
         python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-yaml_str = d['data']['datasource.yaml']
+yaml_str = d['data'].get('datasource.yaml', '')
 yaml_str = yaml_str.replace(
   'nodeGraph:\n      enabled: true',
   'lokiSearch:\n      datasourceUid: Loki\n    nodeGraph:\n      enabled: true'
 )
 d['data']['datasource.yaml'] = yaml_str
 print(json.dumps(d))
-" | kubectl apply -f - 2>&1
-      success "Grafana datasource ConfigMap patched with lokiSearch"
+" | kubectl apply -f - 2>&1 || warn "Grafana datasource patch failed — will retry on next run"
+      success "Grafana datasource ConfigMap patch attempted"
     else
       warn "Grafana datasource ConfigMap already has lokiSearch — skipping"
     fi
