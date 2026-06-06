@@ -709,7 +709,8 @@ is_done "24" || {
 # ─── 25. Grafana dashboards provisioning ──────────────────────────────────────
 step "25/28  Grafana dashboards"
 is_done "25" || {
-  kubectl apply -f "${REPO_ROOT}/k8s/grafana/"
+  kubectl apply -f "${REPO_ROOT}/k8s/grafana/" 2>&1 || \
+    warn "Some Grafana resources not applied — ServiceMonitor CRD may not be ready. Re-run: bash install-stack.sh --from=25"
   success "Grafana dashboard ConfigMaps applied — sidecar will provision them automatically"
   info "Dashboards: Services Overview, SLO/Error Budget, DORA Metrics, Security/GRC, Cost"
   mark_done "25"
