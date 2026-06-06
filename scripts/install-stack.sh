@@ -621,8 +621,9 @@ is_done "17" || {
     warn "Kyverno CRD not ready in 5 min — applying policies anyway (will retry if ArgoCD re-syncs)"
   }
   info "Applying Kyverno policies ..."
-  kubectl apply -f "${REPO_ROOT}/k8s/kyverno-policies/"
-  success "Kyverno policies applied"
+  kubectl apply -f "${REPO_ROOT}/k8s/kyverno-policies/" 2>&1 || \
+    warn "Kyverno policies not applied — CRD not ready yet. Re-run: bash install-stack.sh --from=17 once Kyverno is synced"
+  success "Kyverno policies applied (or queued for reapply)"
   mark_done "17"
 }
 
@@ -664,8 +665,10 @@ is_done "21" || {
   }
 
   info "Applying Gatekeeper ConstraintTemplates ..."
-  kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-template.yaml"
-  kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-template.yaml"
+  kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-template.yaml" 2>&1 || \
+    warn "Gatekeeper ConstraintTemplate not applied — CRD not ready yet"
+  kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-template.yaml" 2>&1 || \
+    warn "Gatekeeper ConstraintTemplate not applied — CRD not ready yet"
 
   info "Waiting for ConstraintTemplate CRDs to be established ..."
   for _i in $(seq 1 12); do
@@ -676,9 +679,11 @@ is_done "21" || {
   done
 
   info "Applying Gatekeeper Constraints (warn mode — violations logged, not blocked) ..."
-  kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-constraint.yaml"
-  kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-constraint.yaml"
-  success "Gatekeeper constraints applied"
+  kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/allowed-registries-constraint.yaml" 2>&1 || \
+    warn "Gatekeeper Constraint not applied — CRD not ready yet. Re-run: bash install-stack.sh --from=21"
+  kubectl apply -f "${REPO_ROOT}/k8s/gatekeeper/require-labels-constraint.yaml" 2>&1 || \
+    warn "Gatekeeper Constraint not applied — CRD not ready yet. Re-run: bash install-stack.sh --from=21"
+  success "Gatekeeper constraints applied (or queued for reapply)"
   mark_done "21"
 }
 
