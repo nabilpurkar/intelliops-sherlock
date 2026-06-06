@@ -5,7 +5,7 @@ metadata:
   name: ai-agent
   namespace: aiops-demo
   annotations:
-    eks.amazonaws.com/role-arn: ""  # populated by configure-stack.sh with Terraform output
+    eks.amazonaws.com/role-arn: "arn:aws:iam::007066145518:role/intelliops-dev-ai-agent-role"
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

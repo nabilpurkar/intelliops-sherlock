@@ -735,61 +735,16 @@ print(json.dumps(d))
   mark_done "12b-post"
 }
 
-# ─── 28. AIOps workloads (namespace + config + deployments) ──────────────────
-step "28/28  AIOps workloads (anomaly-detector, forecaster, alert-correlator, ai-agent)"
+# ─── 28. AIOps pre-requisites — ExternalSecrets not managed by ArgoCD ─────────
+# AIOps deployments (k8s/deployments/) are managed by ArgoCD aiops-app.yaml.
+# IRSA ARNs and SQS URL are embedded in manifests — no kubectl annotate needed.
+step "28/28  AIOps pre-requisites"
 is_done "28" || {
-  info "Applying aiops-config ConfigMap + namespace resources ..."
-  kubectl apply -f "${REPO_ROOT}/k8s/deployments/anomaly-detector.yaml"
-
-  info "Patching aiops-config SQS_QUEUE_URL with account-specific queue URL ..."
-  _ACCT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || true)
-  _REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
-  if [ -n "${_ACCT}" ]; then
-    _SQS_URL="https://sqs.${_REGION}.amazonaws.com/${_ACCT}/intelliops-anomalies"
-    kubectl patch configmap aiops-config -n aiops-demo \
-      --type merge \
-      -p "{\"data\":{\"SQS_QUEUE_URL\":\"${_SQS_URL}\"}}" 2>/dev/null || true
-    info "SQS URL set to: ${_SQS_URL}"
-  else
-    warn "Could not determine AWS account — SQS_QUEUE_URL left empty; ai-agent will poll but not send to SQS"
-  fi
-
-  info "Applying forecaster ..."
-  kubectl apply -f "${REPO_ROOT}/k8s/deployments/forecaster.yaml"
-
-  info "Applying alert-correlator ..."
-  kubectl apply -f "${REPO_ROOT}/k8s/deployments/alert-correlator.yaml"
-
-  info "Applying Slack ExternalSecret ..."
+  info "Applying Slack ExternalSecret (reads intelliops/dev/slack → webhook_url) ..."
+  kubectl create namespace aiops-demo --dry-run=client -o yaml | kubectl apply -f -
   kubectl apply -f "${MANIFESTS}/slack-secret.yaml"
-
-  info "Applying AI agent ..."
-  kubectl apply -f "${REPO_ROOT}/k8s/deployments/ai-agent.yaml"
-
-  # Annotate ServiceAccounts with IRSA role ARNs from Terraform
-  AI_AGENT_ROLE=$(aws iam get-role --role-name "intelliops-dev-ai-agent-role" \
-    --query Role.Arn --output text 2>/dev/null || echo "")
-  ANOMALY_ROLE=$(aws iam get-role --role-name "intelliops-dev-anomaly-detector-role" \
-    --query Role.Arn --output text 2>/dev/null || echo "")
-
-  if [ -n "${AI_AGENT_ROLE}" ]; then
-    kubectl annotate serviceaccount ai-agent -n aiops-demo \
-      "eks.amazonaws.com/role-arn=${AI_AGENT_ROLE}" --overwrite
-    kubectl patch deployment ai-agent -n aiops-demo \
-      -p '{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"'"$(date -u +%FT%TZ)"'"}}}}}' \
-      2>/dev/null || true
-    success "AI agent IRSA role annotated: ${AI_AGENT_ROLE}"
-  fi
-
-  if [ -n "${ANOMALY_ROLE}" ]; then
-    kubectl annotate serviceaccount anomaly-detector -n aiops-demo \
-      "eks.amazonaws.com/role-arn=${ANOMALY_ROLE}" --overwrite
-    success "Anomaly detector IRSA role annotated: ${ANOMALY_ROLE}"
-  fi
-
-  success "AIOps workloads applied to namespace aiops-demo"
-  info "Populate intelliops/dev/slack → webhook_url in AWS SM to enable Slack notifications"
-  info "Models will train on first startup (initContainers) — allow 2–5 min before predictions start"
+  success "Slack ExternalSecret applied — populate intelliops/dev/slack → webhook_url in SM for notifications"
+  info "AIOps deployments managed by ArgoCD (aiops-app.yaml) — models train on first startup (~2–5 min)"
   mark_done "28"
 }
 

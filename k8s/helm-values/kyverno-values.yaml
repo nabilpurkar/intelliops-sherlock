@@ -3,6 +3,9 @@
 
 admissionController:
   replicas: 1
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: "arn:aws:iam::007066145518:role/intelliops-dev-kyverno-role"
   resources:
     requests:
       cpu: 100m

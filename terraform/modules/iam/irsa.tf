@@ -302,3 +302,49 @@ resource "aws_iam_role_policy" "cluster_autoscaler" {
     ]
   })
 }
+
+# ─── Kyverno — ECR pull for cosign image signature verification ───────────────
+
+resource "aws_iam_role" "kyverno" {
+  name = "${var.cluster_name}-kyverno-role"
+
+  assume_role_policy = jsonencode(merge(local.irsa_trust, {
+    Statement = [
+      merge(local.irsa_trust.Statement[0], {
+        Condition = {
+          StringLike = {
+            "${var.eks_oidc_provider_url}:sub" = "system:serviceaccount:kyverno:kyverno-*"
+            "${var.eks_oidc_provider_url}:aud" = "sts.amazonaws.com"
+          }
+        }
+      })
+    ]
+  }))
+
+  tags = merge(local.common_tags, { Name = "${var.cluster_name}-kyverno-role" })
+}
+
+resource "aws_iam_role_policy" "kyverno_ecr" {
+  #checkov:skip=CKV_AWS_355: ecr:GetAuthorizationToken requires wildcard — no resource-level scoping available for ECR auth token endpoint
+  name = "kyverno-ecr-pull"
+  role = aws_iam_role.kyverno.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ECRAuthAndPull"
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:DescribeImages",
+          "ecr:ListImages",
+        ]
+        Resource = "*"
+      },
+    ]
+  })
+}

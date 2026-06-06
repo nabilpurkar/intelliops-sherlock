@@ -1,0 +1,52 @@
+---
+# LitmusChaos 3.x — pod-memory-hog against inventory-service
+# Allocates 512Mi of memory for 60s to simulate a memory leak.
+# Expected outcome: OOM alert fires, ai-agent recommends memory limit increase.
+#
+# Apply:  kubectl apply -f k8s/chaos/pod-memory-hog-inventory.yaml
+# Watch:  kubectl get chaosengine pod-memory-hog-inventory -n apps -w
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-memory-hog-inventory
+  namespace: apps
+  labels:
+    scenario: memory-exhaustion
+    target: inventory-service
+  annotations:
+    litmuschaos.io/chaos: "true"
+spec:
+  appinfo:
+    appns: apps
+    applabel: "app=inventory-service"
+    appkind: deployment
+  engineState: active
+  chaosServiceAccount: litmus-admin
+  monitoring: true
+  jobCleanUpPolicy: retain
+  experiments:
+    - name: pod-memory-hog
+      spec:
+        probe:
+          - name: inventory-service-health
+            type: httpProbe
+            httpProbe/inputs:
+              url: "http://inventory-service.apps.svc.cluster.local:8001/health"
+              insecureSkipVerify: false
+              method:
+                get:
+                  criteria: ==
+                  responseCode: "200"
+            mode: Continuous
+            runProperties:
+              probeTimeout: 5
+              interval: 10
+              retry: 3
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "60"
+            - name: MEMORY_CONSUMPTION
+              value: "512"
+            - name: PODS_AFFECTED_PERC
+              value: "100"

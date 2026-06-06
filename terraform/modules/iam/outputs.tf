@@ -37,3 +37,8 @@ output "cluster_autoscaler_role_arn" {
   description = "IRSA role ARN for Cluster Autoscaler"
   value       = aws_iam_role.cluster_autoscaler.arn
 }
+
+output "kyverno_role_arn" {
+  description = "IRSA role ARN for Kyverno (cosign image signature verification)"
+  value       = aws_iam_role.kyverno.arn
+}

@@ -1,0 +1,55 @@
+---
+# LitmusChaos 3.x — pod-delete against order-service
+# Deletes 50% of order-service pods every 10s for 60s to test circuit breaker resilience.
+# Expected outcome: anomaly-detector fires, ai-agent posts RCA to Slack.
+#
+# Apply:  kubectl apply -f k8s/chaos/pod-delete-order.yaml
+# Watch:  kubectl get chaosengine pod-delete-order -n apps -w
+# Revert: kubectl patch chaosengine pod-delete-order -n apps --type=merge -p '{"spec":{"engineState":"stop"}}'
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-delete-order
+  namespace: apps
+  labels:
+    scenario: resilience
+    target: order-service
+  annotations:
+    litmuschaos.io/chaos: "true"
+spec:
+  appinfo:
+    appns: apps
+    applabel: "app=order-service"
+    appkind: deployment
+  engineState: active
+  chaosServiceAccount: litmus-admin
+  monitoring: true
+  jobCleanUpPolicy: retain
+  experiments:
+    - name: pod-delete
+      spec:
+        probe:
+          - name: order-service-health
+            type: httpProbe
+            httpProbe/inputs:
+              url: "http://order-service.apps.svc.cluster.local:8000/health"
+              insecureSkipVerify: false
+              method:
+                get:
+                  criteria: ==
+                  responseCode: "200"
+            mode: Continuous
+            runProperties:
+              probeTimeout: 5
+              interval: 5
+              retry: 3
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "60"
+            - name: CHAOS_INTERVAL
+              value: "10"
+            - name: FORCE
+              value: "false"
+            - name: PODS_AFFECTED_PERC
+              value: "50"

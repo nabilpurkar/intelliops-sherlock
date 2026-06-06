@@ -1,0 +1,41 @@
+---
+# LitmusChaos 3.x — pod-network-loss against order-service
+# Introduces 50% packet loss for 60s to simulate network partition.
+# Expected outcome: downstream calls fail, circuit breaker opens, alert fires.
+#
+# Apply:  kubectl apply -f k8s/chaos/network-loss-apps.yaml
+# Watch:  kubectl get chaosengine pod-network-loss-order -n apps -w
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-network-loss-order
+  namespace: apps
+  labels:
+    scenario: network-partition
+    target: order-service
+  annotations:
+    litmuschaos.io/chaos: "true"
+spec:
+  appinfo:
+    appns: apps
+    applabel: "app=order-service"
+    appkind: deployment
+  engineState: active
+  chaosServiceAccount: litmus-admin
+  monitoring: true
+  jobCleanUpPolicy: retain
+  experiments:
+    - name: pod-network-loss
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "60"
+            - name: NETWORK_PACKET_LOSS_PERCENTAGE
+              value: "50"
+            - name: CONTAINER_RUNTIME
+              value: containerd
+            - name: SOCKET_PATH
+              value: /run/containerd/containerd.sock
+            - name: PODS_AFFECTED_PERC
+              value: "100"

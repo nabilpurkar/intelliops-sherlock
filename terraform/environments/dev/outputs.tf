@@ -60,6 +60,11 @@ output "irsa_cluster_autoscaler_role_arn" {
   value       = module.iam.cluster_autoscaler_role_arn
 }
 
+output "irsa_kyverno_role_arn" {
+  description = "IRSA role ARN for Kyverno — enables cosign image signature verification"
+  value       = module.iam.kyverno_role_arn
+}
+
 output "github_actions_role_arn" {
   description = "GitHub Actions OIDC role ARN — configured in ci.yml"
   value       = module.iam.role_arn
