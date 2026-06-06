@@ -6,12 +6,11 @@ manager:
     limits:
       cpu: "500m"
       memory: "512Mi"
+  serviceMonitor:
+    enabled: false
 
 admissionWebhooks:
   certManager:
     enabled: true
   autoGenerateCert:
     enabled: false
-
-serviceMonitor:
-  enabled: false
