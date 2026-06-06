@@ -38,6 +38,10 @@ mongo:
 
 mongodb:
   replicaCount: 1
+  image:
+    registry: 007066145518.dkr.ecr.us-east-1.amazonaws.com
+    repository: intelliops-dev/mongodb
+    tag: "5.0"
   persistence:
     storageClass: gp2
     size: 5Gi

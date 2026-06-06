@@ -36,7 +36,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: inventory-service
-          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/inventory-service:f12d864f960c4779c115f43ee28266bfa8b21126
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/inventory-service:latest
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
