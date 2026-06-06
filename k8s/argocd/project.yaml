@@ -85,6 +85,8 @@ spec:
       kind: "*"
     - group: "monitoring.coreos.com"
       kind: "*"
+    - group: "litmuschaos.io"
+      kind: "*"
     - group: "storage.k8s.io"
       kind: StorageClass
     - group: "networking.k8s.io"
@@ -120,9 +122,7 @@ spec:
     - group: "rbac.authorization.k8s.io"
       kind: RoleBinding
     - group: "monitoring.coreos.com"
-      kind: ServiceMonitor
-    - group: "monitoring.coreos.com"
-      kind: PrometheusRule
+      kind: "*"
     - group: "networking.k8s.io"
       kind: NetworkPolicy
     - group: "networking.k8s.io"
