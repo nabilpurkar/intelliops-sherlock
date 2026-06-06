@@ -65,6 +65,16 @@ output "irsa_kyverno_role_arn" {
   value       = module.iam.kyverno_role_arn
 }
 
+output "acm_certificate_arn" {
+  description = "ACM wildcard certificate ARN for *.infrastructurepath.online — used by ALB ingress"
+  value       = data.aws_acm_certificate.wildcard.arn
+}
+
+output "route53_zone_id" {
+  description = "Route53 hosted zone ID for infrastructurepath.online"
+  value       = data.aws_route53_zone.main.zone_id
+}
+
 output "github_actions_role_arn" {
   description = "GitHub Actions OIDC role ARN — configured in ci.yml"
   value       = module.iam.role_arn

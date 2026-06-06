@@ -9,7 +9,7 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:007066145518:certificate/8f1d859b-5bdf-420d-a286-2bf7ea3ec3ef
+    alb.ingress.kubernetes.io/certificate-arn: ${ACM_CERT_ARN}
     alb.ingress.kubernetes.io/group.name: intelliops-alb
     alb.ingress.kubernetes.io/inbound-cidrs: "0.0.0.0/0"
     alb.ingress.kubernetes.io/healthcheck-path: /

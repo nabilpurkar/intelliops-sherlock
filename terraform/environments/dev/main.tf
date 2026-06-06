@@ -24,6 +24,19 @@ data "aws_vpc" "default" {
   default = true
 }
 
+# Route53 zone looked up by name — no hardcoded zone ID
+data "aws_route53_zone" "main" {
+  name         = "infrastructurepath.online"
+  private_zone = false
+}
+
+# ACM wildcard certificate for *.infrastructurepath.online — used by ALB ingress
+data "aws_acm_certificate" "wildcard" {
+  domain      = "*.infrastructurepath.online"
+  statuses    = ["ISSUED"]
+  most_recent = true
+}
+
 data "aws_security_group" "dev_ec2_default" {
   name   = "default"
   vpc_id = data.aws_vpc.default.id
@@ -75,7 +88,7 @@ module "iam" {
   eks_oidc_provider_arn = module.eks.oidc_provider_arn
   eks_oidc_provider_url = module.eks.oidc_provider_url
   cluster_name          = module.eks.cluster_name
-  route53_zone_id       = "Z09505612LJLVLH4DJD2G"
+  route53_zone_id       = data.aws_route53_zone.main.zone_id
 }
 
 module "secrets" {
