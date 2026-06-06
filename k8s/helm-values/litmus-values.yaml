@@ -45,3 +45,5 @@ mongodb:
 adminConfig:
   DBUSER: "admin"
   DB_PORT: "27017"
+  ADMIN_USERNAME: "admin"
+  ADMIN_PASSWORD: "litmus"
