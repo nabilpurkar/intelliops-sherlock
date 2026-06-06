@@ -730,7 +730,7 @@ done
 # Runs after ArgoCD has had time to deploy prometheus stack (async — best effort)
 step "12b-post/28  grafana-datasource-patch"
 is_done "12b-post" || {
-  CM=$(kubectl get configmap -n monitoring -o name 2>/dev/null | grep grafana-datasource | head -1)
+  CM=$(kubectl get configmap -n monitoring -o name 2>/dev/null | grep grafana-datasource | head -1 || true)
   if [ -n "${CM}" ]; then
     PATCH_NEEDED=$(kubectl get "${CM}" -n monitoring \
       -o jsonpath='{.data.datasource\.yaml}' 2>/dev/null | grep -c "lokiSearch" || true)
