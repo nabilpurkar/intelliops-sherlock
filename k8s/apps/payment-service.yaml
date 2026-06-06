@@ -25,7 +25,7 @@ spec:
         version: "1.0.0"
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8002"
+        prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
         instrumentation.opentelemetry.io/inject-python: "true"
     spec:
@@ -47,7 +47,7 @@ spec:
               drop: ["ALL"]
           ports:
             - name: http
-              containerPort: 8002
+              containerPort: 8000
               protocol: TCP
           env:
             - name: ENV
@@ -76,22 +76,22 @@ spec:
               memory: "512Mi"
           livenessProbe:
             httpGet:
-              path: /health
-              port: 8002
+              path: /healthz
+              port: 8000
             initialDelaySeconds: 15
             periodSeconds: 20
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /ready
-              port: 8002
+              path: /healthz
+              port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
           startupProbe:
             httpGet:
-              path: /health
-              port: 8002
+              path: /healthz
+              port: 8000
             failureThreshold: 10
             periodSeconds: 5
           volumeMounts:
@@ -117,7 +117,7 @@ metadata:
     app: payment-service
   annotations:
     prometheus.io/scrape: "true"
-    prometheus.io/port: "8002"
+    prometheus.io/port: "8000"
     prometheus.io/path: "/metrics"
 spec:
   type: ClusterIP
@@ -125,8 +125,8 @@ spec:
     app: payment-service
   ports:
     - name: http
-      port: 8002
-      targetPort: 8002
+      port: 8000
+      targetPort: 8000
       protocol: TCP
 ---
 apiVersion: autoscaling/v2

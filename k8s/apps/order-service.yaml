@@ -80,21 +80,21 @@ spec:
               memory: "512Mi"
           livenessProbe:
             httpGet:
-              path: /health
+              path: /healthz
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 20
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /healthz
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
           startupProbe:
             httpGet:
-              path: /health
+              path: /healthz
               port: 8000
             failureThreshold: 10
             periodSeconds: 5
