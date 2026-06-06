@@ -8,6 +8,9 @@ grafana:
     passwordKey: admin-password
   ingress:
     enabled: false
+  grafana.ini:
+    plugins:
+      enable_alpha: true
 
   # Sidecar watches for ConfigMaps with label grafana_dashboard=1 in all namespaces
   # and auto-provisions them into Grafana. This powers k8s/grafana/dashboard-*.yaml
