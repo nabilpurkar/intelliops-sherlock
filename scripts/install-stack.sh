@@ -690,11 +690,18 @@ is_done "21" || {
 # ─── 24. Application SLOs + Error Budget rules ────────────────────────────────
 step "24/28  SLO recording rules + alerts"
 is_done "24" || {
-  kubectl apply -f "${REPO_ROOT}/k8s/slos/"
+  # Wait for PrometheusRule CRD (Prometheus deployed by ArgoCD wave 1)
+  kubectl wait --for=condition=established crd/prometheusrules.monitoring.coreos.com \
+    --timeout=5m 2>/dev/null || warn "PrometheusRule CRD not ready — SLOs may need reapply"
+  kubectl apply -f "${REPO_ROOT}/k8s/slos/" 2>&1 || \
+    warn "SLO PrometheusRules not applied — CRD not ready. Re-run: bash install-stack.sh --from=24"
   success "PrometheusRule SLOs applied (order/payment/inventory — 99.9% availability SLO)"
 
   info "Applying ServiceMonitors for microservice metrics scraping ..."
-  kubectl apply -f "${REPO_ROOT}/k8s/apps/servicemonitors.yaml"
+  kubectl wait --for=condition=established crd/servicemonitors.monitoring.coreos.com \
+    --timeout=2m 2>/dev/null || warn "ServiceMonitor CRD not ready"
+  kubectl apply -f "${REPO_ROOT}/k8s/apps/servicemonitors.yaml" 2>&1 || \
+    warn "ServiceMonitors not applied — CRD not ready. Re-run: bash install-stack.sh --from=24"
   success "ServiceMonitors applied — Prometheus will scrape order/payment/inventory /metrics"
   mark_done "24"
 }
