@@ -54,6 +54,8 @@ backstage:
       database:
         client: better-sqlite3
         connection: ":memory:"
+      auth:
+        dangerouslyDisableDefaultAuthPolicy: true
 
     integrations:
       github:

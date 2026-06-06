@@ -43,6 +43,7 @@ resource "aws_internet_gateway" "main" {
 
 # ─── Public Subnets ───────────────────────────────────────────────────────────
 
+#trivy:ignore:AVD-AWS-0164
 resource "aws_subnet" "public" {
   #checkov:skip=CKV_AWS_130: Public subnets intentionally assign public IPs for load balancers
   count = length(var.public_subnet_cidrs)

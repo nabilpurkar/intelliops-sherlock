@@ -27,6 +27,7 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
+        instrumentation.opentelemetry.io/inject-python: "true"
     spec:
       serviceAccountName: apps-sa
       securityContext:
@@ -42,6 +43,8 @@ spec:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 1000
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: http
               containerPort: 8000
@@ -54,6 +57,16 @@ spec:
                 configMapKeyRef:
                   name: otel-collector-config
                   key: OTEL_ENDPOINT
+            - name: OTEL_SERVICE_NAME
+              value: "order-service"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
             - name: INVENTORY_SERVICE_URL
               value: "http://inventory-service.apps.svc.cluster.local:8001"
             - name: PAYMENT_SERVICE_URL

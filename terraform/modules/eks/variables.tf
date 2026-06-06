@@ -7,7 +7,7 @@ variable "cluster_name" {
 variable "cluster_version" {
   description = "Kubernetes version for the EKS cluster"
   type        = string
-  default     = "1.33"
+  default     = "1.35"
 }
 
 variable "environment" {
@@ -65,7 +65,7 @@ variable "node_disk_size" {
 variable "cluster_log_retention_days" {
   description = "CloudWatch log retention in days for EKS control plane logs"
   type        = number
-  default     = 30
+  default     = 0
 }
 
 variable "allowed_cidr_blocks" {

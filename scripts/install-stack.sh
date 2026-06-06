@@ -73,7 +73,7 @@ elif [ -n "${_FROM}" ]; then
   # Remove checkpoint entries for step _FROM and higher from the state file
   if [ -f "${STATE_FILE}" ]; then
     # Build ordered step list; remove entries at or after _FROM
-    _ORDERED=(0 1 2 3 4 5 6 7 8 9 9b 10 11 12 13 14 15 16 16b 16c 17 18 19 20 21 22 23 24 25 26 27 28)
+    _ORDERED=(0 1 2 3 4 5 6 7 8 9 9b 10 11 12 12b 13 13a 13b 14 15 15b 16 16b 16c 17 18 19 20 21 22 23 24 25 26 27 28)
     _KEEP=()
     _DROP=false
     for _s in "${_ORDERED[@]}"; do
@@ -493,6 +493,38 @@ is_done "12" || {
   mark_done "12"
 }
 
+# ─── 12b. Patch Grafana datasource ConfigMap (add lokiSearch link Tempo→Loki) ─
+step "12b/28  grafana-datasource-patch"
+is_done "12b" || {
+  # kube-prometheus-stack upgrade is blocked by Kyverno on its admission Job hooks.
+  # Patch the ConfigMap directly instead of re-running helm upgrade.
+  CM=$(kubectl get configmap -n monitoring -o name 2>/dev/null | grep grafana-datasource | head -1)
+  if [ -n "${CM}" ]; then
+    PATCH_NEEDED=$(kubectl get "${CM}" -n monitoring \
+      -o jsonpath='{.data.datasource\.yaml}' 2>/dev/null | grep -c "lokiSearch" || true)
+    if [ "${PATCH_NEEDED}" = "0" ]; then
+      info "Patching Grafana datasource ConfigMap to add lokiSearch for Tempo..."
+      kubectl get "${CM}" -n monitoring -o json | \
+        python3 -c "
+import sys, json, re
+d = json.load(sys.stdin)
+yaml_str = d['data']['datasource.yaml']
+# Insert lokiSearch after nodeGraph block
+yaml_str = yaml_str.replace(
+  'nodeGraph:\n      enabled: true',
+  'lokiSearch:\n      datasourceUid: Loki\n    nodeGraph:\n      enabled: true'
+)
+d['data']['datasource.yaml'] = yaml_str
+print(json.dumps(d))
+" | kubectl apply -f - 2>&1
+      success "Grafana datasource ConfigMap patched with lokiSearch"
+    else
+      warn "Grafana datasource ConfigMap already has lokiSearch — skipping patch"
+    fi
+  fi
+  mark_done "12b"
+}
+
 # ─── 13. loki ────────────────────────────────────────────────────────────────
 step "13/28  loki"
 is_done "13" || {
@@ -500,6 +532,17 @@ is_done "13" || {
     "${CHARTS}/loki" \
     -f "${VALUES}/loki-values.yaml"
   mark_done "13"
+}
+
+# ─── 13a. cleanup orphaned loki-promtail DaemonSet from old loki-stack chart ─
+step "13a/28  cleanup-loki-stack-promtail"
+is_done "13a" || {
+  if kubectl get daemonset loki-promtail -n monitoring &>/dev/null; then
+    info "Removing orphaned loki-promtail DaemonSet from old loki-stack chart..."
+    kubectl delete daemonset loki-promtail -n monitoring 2>&1 || true
+    success "loki-promtail DaemonSet removed"
+  fi
+  mark_done "13a"
 }
 
 # ─── 13b. promtail ───────────────────────────────────────────────────────────
@@ -527,6 +570,19 @@ is_done "15" || {
     "${CHARTS}/opentelemetry-collector" \
     -f "${VALUES}/otel-collector-values.yaml"
   mark_done "15"
+}
+
+# ─── 15b. OpenTelemetry Operator (Python auto-instrumentation via annotation) ─
+step "15b/28  opentelemetry-operator"
+is_done "15b" || {
+  helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts 2>/dev/null || true
+  helm repo update open-telemetry 2>/dev/null || true
+  helm_install opentelemetry-operator monitoring \
+    open-telemetry/opentelemetry-operator \
+    -f "${VALUES}/otel-operator-values.yaml" \
+    --timeout 5m
+  success "OpenTelemetry Operator installed — pods with inject-python annotation will be auto-instrumented"
+  mark_done "15b"
 }
 
 # ─── 16. kong ────────────────────────────────────────────────────────────────

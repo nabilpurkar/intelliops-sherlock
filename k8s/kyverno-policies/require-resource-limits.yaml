@@ -1,3 +1,5 @@
+---
+# Enforce resource limits in the apps namespace (user workloads must always set limits).
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -8,7 +10,8 @@ metadata:
     policies.kyverno.io/severity: medium
     policies.kyverno.io/description: >-
       Resource limits prevent noisy-neighbour DoS — required for RBI IT Security
-      Framework availability controls and multi-tenant cluster stability.
+      Framework availability controls. Enforced only in apps namespace; platform
+      namespaces (monitoring, defectdojo, sonarqube) are audited, not blocked.
 spec:
   validationFailureAction: Enforce
   background: true
@@ -20,11 +23,43 @@ spec:
               kinds: [Pod]
               namespaces:
                 - apps
+      validate:
+        message: "CPU and memory limits are required for all containers in the apps namespace."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"
+---
+# Audit resource limits in platform namespaces (warn without blocking upgrades/restarts).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: audit-resource-limits-platform
+  annotations:
+    policies.kyverno.io/title: Audit Resource Limits (Platform)
+    policies.kyverno.io/category: Best Practices / BFSI
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/description: >-
+      Audit-only check: platform tools should set resource limits but upgrades
+      must not be blocked when third-party charts omit them.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: audit-limits
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces:
                 - monitoring
                 - defectdojo
                 - sonarqube
       validate:
-        message: "CPU and memory limits are required."
+        message: "CPU and memory limits are recommended for platform pods."
         pattern:
           spec:
             containers:

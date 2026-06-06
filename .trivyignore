@@ -1,0 +1,7 @@
+# Trivy ignore file — dev/learning environment exceptions
+# These findings are intentional design decisions, not security gaps.
+
+AVD-AWS-0135  # SQS: AWS managed key (alias/aws/sqs) sufficient for dev — CMK adds cost
+AVD-AWS-0031  # ECR: mutable tags by design — CI pipeline overwrites on each build
+AVD-AWS-0040  # EKS: public API endpoint required — EC2 control-plane access needed
+AVD-AWS-0164  # VPC: public subnets assign public IPs — required for ALB node attachment

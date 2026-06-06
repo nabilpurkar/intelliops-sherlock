@@ -129,6 +129,10 @@ spec:
         spec:
           serviceAccountName: forecaster
           restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
           containers:
             - name: train
               image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/forecaster:latest
@@ -145,6 +149,9 @@ spec:
                 requests:
                   cpu: 500m
                   memory: 1Gi
+                limits:
+                  cpu: "1"
+                  memory: 2Gi
               securityContext:
                 runAsNonRoot: true
                 runAsUser: 1000

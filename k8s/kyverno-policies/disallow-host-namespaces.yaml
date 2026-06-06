@@ -10,6 +10,8 @@ metadata:
       Pods must not use hostNetwork, hostPID, or hostIPC — these break container
       isolation and expose the host network stack. Required for PCI-DSS 6.3 and
       RBI IT Security Framework network segmentation controls.
+      Monitoring namespace is excluded because node-exporter legitimately needs
+      hostNetwork and hostPID to collect host-level metrics.
 spec:
   validationFailureAction: Enforce
   background: true
@@ -28,6 +30,7 @@ spec:
                 - cert-manager
                 - linkerd
                 - linkerd-cni
+                - monitoring
       validate:
         message: "hostNetwork, hostPID, and hostIPC must not be enabled."
         pattern:

@@ -10,6 +10,7 @@ locals {
   )
 }
 
+#trivy:ignore:AVD-AWS-0031
 resource "aws_ecr_repository" "services" {
   #checkov:skip=CKV_AWS_136: KMS encryption disabled for dev; enable for staging/prod
   #checkov:skip=CKV_AWS_51: MUTABLE tags allow :latest pushes in dev; set IMMUTABLE for prod

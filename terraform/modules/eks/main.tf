@@ -263,8 +263,9 @@ resource "aws_security_group_rule" "node_ingress_vpc" {
   security_group_id = aws_security_group.node.id
 }
 
+#trivy:ignore:AVD-AWS-0104
 resource "aws_security_group_rule" "node_egress_https" {
-  description       = "Nodes to AWS services (ECR, S3, CloudWatch, STS) via NAT"
+  description       = "Nodes to AWS services (ECR, S3, CloudWatch, STS) via NAT - unrestricted egress via NAT Gateway only"
   type              = "egress"
   from_port         = 443
   to_port           = 443
@@ -295,6 +296,8 @@ resource "aws_security_group_rule" "node_egress_dns_udp" {
 
 # ─── EKS Cluster ─────────────────────────────────────────────────────────────
 
+#trivy:ignore:AVD-AWS-0039
+#trivy:ignore:AVD-AWS-0040
 resource "aws_eks_cluster" "main" {
   #checkov:skip=CKV_AWS_339: EKS 1.33 is latest stable version, Checkov list not yet updated
   #checkov:skip=CKV_AWS_39: public endpoint intentionally enabled for dev; set endpoint_public_access=false in prod

@@ -15,6 +15,7 @@ spec:
     targetRevision: main
     path: k8s/load-generator
 
+
   destination:
     server: https://kubernetes.default.svc
     namespace: locust

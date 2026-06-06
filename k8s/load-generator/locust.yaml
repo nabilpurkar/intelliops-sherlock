@@ -1,0 +1,92 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locust-config
+  namespace: locust
+data:
+  # Override host per test run; default points at order-service in apps ns
+  HOST: "http://order-service.apps.svc.cluster.local:8000"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust
+  namespace: locust
+  labels:
+    app: locust
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust
+  template:
+    metadata:
+      labels:
+        app: locust
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: locust
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/load-generator:latest
+          ports:
+            - containerPort: 8089
+              name: web
+          env:
+            - name: LOCUST_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: locust-config
+                  key: HOST
+          args:
+            - locust
+            - --host
+            - $(LOCUST_HOST)
+            - --web-host
+            - "0.0.0.0"
+            - --web-port
+            - "8089"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8089
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8089
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust
+  namespace: locust
+  labels:
+    app: locust
+spec:
+  selector:
+    app: locust
+  ports:
+    - port: 8089
+      targetPort: 8089
+      name: web

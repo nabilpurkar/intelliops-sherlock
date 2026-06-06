@@ -13,6 +13,8 @@
 #
 # Usage:
 #   ./scripts/destroy-stack.sh
+#   ./scripts/destroy-stack.sh --bg           # run in background (auto-confirms)
+#   ./scripts/destroy-stack.sh --skip-ns      # skip namespace deletion step
 #   SKIP_CONFIRM=true ./scripts/destroy-stack.sh   # non-interactive (CI)
 #
 set -euo pipefail
@@ -102,6 +104,28 @@ CUSTOM_NAMESPACES=(
   backstage litmus aiops-demo
 )
 
+# ── Flag parsing ─────────────────────────────────────────────────────────────
+_BG=false
+_SKIP_NS=false
+for _arg in "$@"; do
+  case "${_arg}" in
+    --bg)       _BG=true ;;
+    --skip-ns)  _SKIP_NS=true ;;
+    *)          die "Unknown flag: ${_arg}  (supported: --bg, --skip-ns)" ;;
+  esac
+done
+
+if ${_BG}; then
+  export SKIP_CONFIRM=true
+  _ARGS_NO_BG=()
+  for _a in "$@"; do [[ "${_a}" != "--bg" ]] && _ARGS_NO_BG+=("${_a}"); done
+  LOG_FILE="${REPO_ROOT}/destroy-stack.log"
+  nohup "$0" "${_ARGS_NO_BG[@]}" > "${LOG_FILE}" 2>&1 &
+  echo "Destroy running in background (PID $!)"
+  echo "Monitor: tail -f ${LOG_FILE}"
+  exit 0
+fi
+
 # ── Confirmation ──────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}${RED}╔══════════════════════════════════════════════════════╗${NC}"
@@ -138,7 +162,7 @@ if kubectl get applications -n argocd &>/dev/null 2>&1; then
   done
   # Delete all ArgoCD applications (removes managed workloads via cascade)
   kubectl delete applications --all -n argocd \
-    --ignore-not-found --timeout=120s 2>/dev/null || true
+    --ignore-not-found --timeout=30s 2>/dev/null || true
   success "ArgoCD Applications removed"
 else
   warn "ArgoCD not reachable — skipping (cluster may already be down)"
@@ -150,7 +174,7 @@ fi
 # orphaned EBS volumes that block VPC/subnet destruction in terraform.
 step "2/8  Delete app workloads and PVCs"
 
-for ns in apps locust; do
+for ns in apps locust aiops-demo; do
   if kubectl get namespace "${ns}" &>/dev/null 2>&1; then
     info "Deleting all resources in namespace: ${ns} ..."
     kubectl delete all --all -n "${ns}" --timeout=60s 2>/dev/null || true
@@ -227,12 +251,21 @@ for entry in "${HELM_RELEASES[@]}"; do
   namespace="${entry##*:}"
   if helm status "${release}" -n "${namespace}" &>/dev/null 2>&1; then
     info "Uninstalling ${release} from ${namespace} ..."
-    if helm uninstall "${release}" -n "${namespace}" --timeout 5m --wait 2>&1; then
-      success "Uninstalled: ${release}"
-    else
-      warn "Failed to uninstall ${release} cleanly — forcing with no-hooks"
-      helm uninstall "${release}" -n "${namespace}" --no-hooks 2>/dev/null || true
-    fi
+    case "${release}" in
+      external-secrets)
+        # Skip hooks — pre-delete hook hangs when ExternalSecrets have stuck finalizers
+        helm uninstall "${release}" -n "${namespace}" --no-hooks --wait=false 2>/dev/null || true
+        success "Uninstalled: ${release} (no-hooks)"
+        ;;
+      *)
+        if helm uninstall "${release}" -n "${namespace}" --timeout 90s --wait 2>&1; then
+          success "Uninstalled: ${release}"
+        else
+          warn "Failed to uninstall ${release} cleanly — forcing with no-hooks"
+          helm uninstall "${release}" -n "${namespace}" --no-hooks 2>/dev/null || true
+        fi
+        ;;
+    esac
   else
     warn "${release} not installed — skipping"
   fi
@@ -316,6 +349,10 @@ success "AWS load balancer and security group cleanup complete"
 # ── Step 5: Delete custom namespaces ──────────────────────────────────────────
 step "5/8  Delete namespaces"
 
+if ${_SKIP_NS}; then
+  warn "Namespace deletion skipped (--skip-ns)"
+else
+
 # Remove ESO finalizers from ALL ExternalSecrets before deleting namespaces.
 # When ESO is uninstalled first (step 3), its controller is gone and can no
 # longer process finalizer-removal — causing namespaces to stick in Terminating.
@@ -350,6 +387,8 @@ done
 
 success "All namespaces cleaned"
 
+fi  # end --skip-ns check
+
 # ── Step 6: Terraform destroy ─────────────────────────────────────────────────
 step "6/8  Terraform destroy"
 
@@ -365,9 +404,11 @@ terraform init -reconfigure \
   || die "terraform init failed — check backend connectivity (S3: ${TF_BUCKET})"
 
 info "Running terraform destroy (this takes ~15-20 minutes) ..."
-terraform destroy -auto-approve -no-color \
+# -refresh=false prevents Terraform from trying to create resources when AWS state
+# has drifted (e.g. EKS cluster manually deleted before running this script).
+terraform destroy -auto-approve -no-color -refresh=false \
   || {
-    warn "terraform destroy exited non-zero — retrying once (common with eventual-consistency races) ..."
+    warn "terraform destroy (refresh=false) failed — retrying with full refresh ..."
     sleep 30
     terraform destroy -auto-approve -no-color \
       || die "terraform destroy failed on retry — check output above and run manually"

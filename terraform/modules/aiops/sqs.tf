@@ -10,8 +10,10 @@ locals {
   )
 }
 
+#trivy:ignore:AVD-AWS-0135
 resource "aws_sqs_queue" "anomalies_dlq" {
   #checkov:skip=CKV_AWS_27: SSE with CMK not required for dev — SQS managed encryption sufficient
+  #checkov:skip=CKV2_AWS_73: CMK not required for dev — AWS managed key sufficient
   name                      = "intelliops-anomalies-dlq"
   message_retention_seconds = 86400
   kms_master_key_id         = "alias/aws/sqs"
@@ -19,8 +21,10 @@ resource "aws_sqs_queue" "anomalies_dlq" {
   tags = merge(local.common_tags, { Name = "intelliops-anomalies-dlq" })
 }
 
+#trivy:ignore:AVD-AWS-0135
 resource "aws_sqs_queue" "anomalies" {
   #checkov:skip=CKV_AWS_27: SSE with CMK not required for dev — SQS managed encryption sufficient
+  #checkov:skip=CKV2_AWS_73: CMK not required for dev — AWS managed key sufficient
   name                       = "intelliops-anomalies"
   visibility_timeout_seconds = 300
   message_retention_seconds  = 86400
