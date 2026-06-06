@@ -25,23 +25,12 @@ portal:
           cpu: 250m
           memory: 256Mi
 
-mongo:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 300Mi
-    limits:
-      cpu: 250m
-      memory: 600Mi
-  persistence:
-    size: 5Gi
+# Use existing secret from AWS Secrets Manager via ExternalSecrets
+existingSecret: litmus-mongodb-secret
 
 mongodb:
   replicaCount: 1
-  image:
-    registry: 007066145518.dkr.ecr.us-east-1.amazonaws.com
-    repository: intelliops-dev/mongodb
-    tag: "5.0"
+  architecture: standalone
   persistence:
     storageClass: gp2
     size: 5Gi
@@ -50,12 +39,10 @@ mongodb:
     # AWS Secrets Manager (intelliops/dev/litmus) — nothing hardcoded here.
     existingSecret: litmus-mongodb-secret
   volumePermissions:
-    enabled: false
+    enabled: true
   arbiter:
     enabled: false
 
 adminConfig:
   DBUSER: "admin"
   DB_PORT: "27017"
-  # DB_SERVER intentionally not set — chart template generates correct URI:
-  # mongodb://litmus-mongodb-0.litmus-mongodb-headless:27017/admin

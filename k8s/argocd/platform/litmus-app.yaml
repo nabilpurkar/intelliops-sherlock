@@ -10,7 +10,7 @@ spec:
   sources:
     - repoURL: https://litmuschaos.github.io/litmus-helm/
       chart: litmus
-      targetRevision: "3.20.0"
+      targetRevision: "3.29.1"
       helm:
         valueFiles:
           - $values/k8s/helm-values/litmus-values.yaml
