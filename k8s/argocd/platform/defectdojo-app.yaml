@@ -20,6 +20,11 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: defectdojo
+  ignoreDifferences:
+    - group: batch
+      kind: Job
+      jsonPointers:
+        - /status
   syncPolicy:
     automated:
       prune: true
