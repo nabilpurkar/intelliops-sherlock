@@ -6,7 +6,7 @@ metadata:
   name: order-service
   namespace: apps
   labels:
-    release: kube-prometheus-stack
+    release: prometheus
 spec:
   namespaceSelector:
     matchNames: [apps]
@@ -24,7 +24,7 @@ metadata:
   name: payment-service
   namespace: apps
   labels:
-    release: kube-prometheus-stack
+    release: prometheus
 spec:
   namespaceSelector:
     matchNames: [apps]
@@ -42,7 +42,7 @@ metadata:
   name: inventory-service
   namespace: apps
   labels:
-    release: kube-prometheus-stack
+    release: prometheus
 spec:
   namespaceSelector:
     matchNames: [apps]

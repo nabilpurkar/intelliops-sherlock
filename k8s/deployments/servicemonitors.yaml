@@ -1,0 +1,72 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: anomaly-detector
+  namespace: aiops-demo
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames: [aiops-demo]
+  selector:
+    matchLabels:
+      app: anomaly-detector
+  endpoints:
+    - targetPort: 8080
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: forecaster
+  namespace: aiops-demo
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames: [aiops-demo]
+  selector:
+    matchLabels:
+      app: forecaster
+  endpoints:
+    - targetPort: 8080
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: alert-correlator
+  namespace: aiops-demo
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames: [aiops-demo]
+  selector:
+    matchLabels:
+      app: alert-correlator
+  endpoints:
+    - targetPort: 8080
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ai-agent
+  namespace: aiops-demo
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames: [aiops-demo]
+  selector:
+    matchLabels:
+      app: ai-agent
+  endpoints:
+    - targetPort: 8080
+      path: /metrics
+      interval: 15s

@@ -29,6 +29,14 @@ collectors:
   kubernetes:
     enabled: true
 
+resources:
+  requests:
+    cpu: "100m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+
 customRules:
   custom-rules.yaml: |-
     - rule: Unexpected outbound connection from service pod
@@ -80,7 +88,7 @@ customRules:
       desc: A container process is running as root when it should not be
       condition: >
         container and
-        k8s.ns.name in (apps, aiops-demo, monitoring) and
+        k8s.ns.name in (apps, aiops-demo) and
         user.uid = 0 and
         not proc.name in (pause, containerd-shim)
       output: >

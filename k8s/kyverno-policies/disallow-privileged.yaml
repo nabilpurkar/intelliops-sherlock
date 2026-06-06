@@ -27,6 +27,7 @@ spec:
                 - cert-manager
                 - linkerd
                 - linkerd-cni
+                - sonarqube
       validate:
         message: "Privileged containers are not allowed. Remove securityContext.privileged: true."
         pattern:

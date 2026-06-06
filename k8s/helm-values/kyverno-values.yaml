@@ -1,6 +1,11 @@
 # chart: kyverno/kyverno version 3.8.1 (app v1.18.1)
 # install: helm upgrade --install kyverno k8s/helm-charts/kyverno-3.8.1.tgz -n kyverno --create-namespace -f k8s/helm-values/kyverno-values.yaml
 
+features:
+  policyExceptions:
+    enabled: true
+    namespace: ""
+
 admissionController:
   replicas: 1
   serviceAccount:
