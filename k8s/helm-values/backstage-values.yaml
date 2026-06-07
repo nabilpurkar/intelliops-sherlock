@@ -108,7 +108,7 @@ backstage:
 
     catalog:
       rules:
-        - allow: [Component, API, Location, System, Domain, Resource]
+        - allow: [Component, API, Location, System, Domain, Resource, Group, User]
       locations:
         - type: url
           target: https://github.com/nabilpurkar/intelliops-sherlock/blob/main/catalog-info.yaml
