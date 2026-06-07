@@ -1,10 +1,9 @@
 ---
-# ServiceMonitor — scrape Kyverno admission controller + background controller metrics
-# Kyverno exposes metrics on port 8000 via separate ClusterIP services
+# ServiceMonitor — scrape Kyverno admission controller metrics
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: kyverno
+  name: kyverno-admission
   namespace: monitoring
   labels:
     release: prometheus
@@ -13,11 +12,49 @@ spec:
     matchNames:
       - kyverno
   selector:
-    matchExpressions:
-      - key: app.kubernetes.io/part-of
-        operator: In
-        values: [kyverno]
+    matchLabels:
+      app.kubernetes.io/name: kyverno-admission-controller
   endpoints:
-    - port: metrics
+    - port: metrics-port
+      interval: 30s
+      path: /metrics
+---
+# ServiceMonitor — scrape Kyverno background controller metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kyverno-background
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - kyverno
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kyverno-background-controller
+  endpoints:
+    - port: metrics-port
+      interval: 30s
+      path: /metrics
+---
+# ServiceMonitor — scrape Kyverno reports controller metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kyverno-reports
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - kyverno
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kyverno-reports-controller
+  endpoints:
+    - port: metrics-port
       interval: 30s
       path: /metrics
