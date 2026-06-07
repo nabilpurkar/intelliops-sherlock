@@ -26,12 +26,15 @@ LATENCY      = Histogram("inventory_request_duration_secs", "Request latency", [
 DISK_WRITE   = Histogram("inventory_disk_write_secs", "Disk write latency",
                   buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0])
 LOW_STOCK    = Gauge("inventory_low_stock_items", "Items below reorder threshold")
+TOTAL_ITEMS  = Gauge("inventory_items_total", "Total tracked inventory items")
 CACHE_OPS    = Counter("inventory_cache_ops_total", "Cache operations", ["result"])
 
 # Chaos state — stock levels (item_id → quantity)
 _stock: dict = {f"item-{i}": random.randint(50, 500) for i in range(1, 21)}
 _STOCK_BACKUP: dict = dict(_stock)
 _DISK_STRESS_DIR = "/tmp/inventory-stress"
+
+TOTAL_ITEMS.set(len(_stock))
 
 LOW_STOCK.set(sum(1 for v in _stock.values() if v < 20))
 
@@ -132,6 +135,7 @@ def stock_drain():
     for k in _stock:
         _stock[k] = 0
     LOW_STOCK.set(len(_stock))
+    TOTAL_ITEMS.set(len(_stock))
     return {"status": "drained", "items_affected": len(_stock)}
 
 @app.get("/chaos/stock-restore")

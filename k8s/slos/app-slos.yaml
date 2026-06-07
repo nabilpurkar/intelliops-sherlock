@@ -78,37 +78,37 @@ spec:
       rules:
         - record: slo:payment_service:error_rate5m
           expr: |
-            sum(rate(payment_requests_total{status=~"5.."}[5m])) /
+            ((sum(rate(payment_requests_total{status=~"5.."}[5m])) or vector(0)) or vector(0)) /
             sum(rate(payment_requests_total[5m]))
 
         - record: slo:payment_service:error_rate30m
           expr: |
-            sum(rate(payment_requests_total{status=~"5.."}[30m])) /
+            ((sum(rate(payment_requests_total{status=~"5.."}[30m])) or vector(0)) or vector(0)) /
             sum(rate(payment_requests_total[30m]))
 
         - record: slo:payment_service:error_rate1h
           expr: |
-            sum(rate(payment_requests_total{status=~"5.."}[1h])) /
+            ((sum(rate(payment_requests_total{status=~"5.."}[1h])) or vector(0)) or vector(0)) /
             sum(rate(payment_requests_total[1h]))
 
         - record: slo:payment_service:error_rate2h
           expr: |
-            sum(rate(payment_requests_total{status=~"5.."}[2h])) /
+            ((sum(rate(payment_requests_total{status=~"5.."}[2h])) or vector(0)) or vector(0)) /
             sum(rate(payment_requests_total[2h]))
 
         - record: slo:payment_service:error_rate6h
           expr: |
-            sum(rate(payment_requests_total{status=~"5.."}[6h])) /
+            ((sum(rate(payment_requests_total{status=~"5.."}[6h])) or vector(0)) or vector(0)) /
             sum(rate(payment_requests_total[6h]))
 
         - record: slo:payment_service:error_rate1d
           expr: |
-            sum(rate(payment_requests_total{status=~"5.."}[1d])) /
+            ((sum(rate(payment_requests_total{status=~"5.."}[1d])) or vector(0)) or vector(0)) /
             sum(rate(payment_requests_total[1d]))
 
         - record: slo:payment_service:error_rate3d
           expr: |
-            sum(rate(payment_requests_total{status=~"5.."}[3d])) /
+            ((sum(rate(payment_requests_total{status=~"5.."}[3d])) or vector(0)) or vector(0)) /
             sum(rate(payment_requests_total[3d]))
 
         - record: slo:payment_service:latency_p95_5m
@@ -122,7 +122,7 @@ spec:
         - record: slo:payment_service:error_budget_remaining
           expr: |
             1 - (
-              sum(increase(payment_requests_total{status=~"5.."}[30d])) /
+              ((sum(increase(payment_requests_total{status=~"5.."}[30d])) or vector(0)) or vector(0)) /
               sum(increase(payment_requests_total[30d]))
             ) / 0.001
 
@@ -131,37 +131,37 @@ spec:
       rules:
         - record: slo:inventory_service:error_rate5m
           expr: |
-            sum(rate(inventory_requests_total{status=~"5.."}[5m])) /
+            ((sum(rate(inventory_requests_total{status=~"5.."}[5m])) or vector(0)) or vector(0)) /
             sum(rate(inventory_requests_total[5m]))
 
         - record: slo:inventory_service:error_rate30m
           expr: |
-            sum(rate(inventory_requests_total{status=~"5.."}[30m])) /
+            ((sum(rate(inventory_requests_total{status=~"5.."}[30m])) or vector(0)) or vector(0)) /
             sum(rate(inventory_requests_total[30m]))
 
         - record: slo:inventory_service:error_rate1h
           expr: |
-            sum(rate(inventory_requests_total{status=~"5.."}[1h])) /
+            ((sum(rate(inventory_requests_total{status=~"5.."}[1h])) or vector(0)) or vector(0)) /
             sum(rate(inventory_requests_total[1h]))
 
         - record: slo:inventory_service:error_rate2h
           expr: |
-            sum(rate(inventory_requests_total{status=~"5.."}[2h])) /
+            ((sum(rate(inventory_requests_total{status=~"5.."}[2h])) or vector(0)) or vector(0)) /
             sum(rate(inventory_requests_total[2h]))
 
         - record: slo:inventory_service:error_rate6h
           expr: |
-            sum(rate(inventory_requests_total{status=~"5.."}[6h])) /
+            ((sum(rate(inventory_requests_total{status=~"5.."}[6h])) or vector(0)) or vector(0)) /
             sum(rate(inventory_requests_total[6h]))
 
         - record: slo:inventory_service:error_rate1d
           expr: |
-            sum(rate(inventory_requests_total{status=~"5.."}[1d])) /
+            ((sum(rate(inventory_requests_total{status=~"5.."}[1d])) or vector(0)) or vector(0)) /
             sum(rate(inventory_requests_total[1d]))
 
         - record: slo:inventory_service:error_rate3d
           expr: |
-            sum(rate(inventory_requests_total{status=~"5.."}[3d])) /
+            ((sum(rate(inventory_requests_total{status=~"5.."}[3d])) or vector(0)) or vector(0)) /
             sum(rate(inventory_requests_total[3d]))
 
         - record: slo:inventory_service:latency_p95_5m
@@ -175,7 +175,7 @@ spec:
         - record: slo:inventory_service:error_budget_remaining
           expr: |
             1 - (
-              sum(increase(inventory_requests_total{status=~"5.."}[30d])) /
+              ((sum(increase(inventory_requests_total{status=~"5.."}[30d])) or vector(0)) or vector(0)) /
               sum(increase(inventory_requests_total[30d]))
             ) / 0.001
 

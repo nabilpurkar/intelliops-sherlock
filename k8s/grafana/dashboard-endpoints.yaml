@@ -289,7 +289,7 @@ data:
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "prometheus"},
-              "expr": "sum(rate(payment_requests_total[5m])) by (endpoint)",
+              "expr": "sum(rate(payment_requests_total[5m])) by (exported_endpoint)",
               "legendFormat": "{{endpoint}}"
             }
           ]
@@ -328,7 +328,7 @@ data:
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "prometheus"},
-              "expr": "sum(rate(payment_requests_total{status=~\"5..\"}[5m])) by (endpoint) / sum(rate(payment_requests_total[5m])) by (endpoint)",
+              "expr": "sum(rate(payment_requests_total{status=~\"5..\"}[5m])) by (endpoint) / sum(rate(payment_requests_total[5m])) by (exported_endpoint)",
               "legendFormat": "{{endpoint}}"
             }
           ]
@@ -455,7 +455,7 @@ data:
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "prometheus"},
-              "expr": "sum(rate(inventory_requests_total[5m])) by (endpoint)",
+              "expr": "sum(rate(inventory_requests_total[5m])) by (exported_endpoint)",
               "legendFormat": "{{endpoint}}"
             }
           ]
@@ -494,7 +494,7 @@ data:
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "prometheus"},
-              "expr": "sum(rate(inventory_requests_total{status=~\"5..\"}[5m])) by (endpoint) / sum(rate(inventory_requests_total[5m])) by (endpoint)",
+              "expr": "sum(rate(inventory_requests_total{status=~\"5..\"}[5m])) by (endpoint) / sum(rate(inventory_requests_total[5m])) by (exported_endpoint)",
               "legendFormat": "{{endpoint}}"
             }
           ]

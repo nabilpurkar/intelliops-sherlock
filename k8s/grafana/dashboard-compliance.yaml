@@ -40,7 +40,7 @@ data:
             }
           },
           "targets": [{
-            "expr": "increase(falcosecurity_falcosidekick_falco_events_total{priority=\"Critical\"}[24h]) or vector(0)",
+            "expr": "increase(falcosecurity_falcosidekick_falco_events_total{priority_raw=\"critical\"}[24h]) or vector(0)",
             "instant": true, "legendFormat": ""
           }]
         },
@@ -61,7 +61,7 @@ data:
             }
           },
           "targets": [{
-            "expr": "increase(falcosecurity_falcosidekick_falco_events_total{priority=~\"Critical|Error\"}[24h]) or vector(0)",
+            "expr": "increase(falcosecurity_falcosidekick_falco_events_total{priority_raw=~\"critical|error\"}[24h]) or vector(0)",
             "instant": true, "legendFormat": ""
           }]
         },
@@ -155,10 +155,10 @@ data:
             ]
           },
           "targets": [
-            {"expr": "rate(falcosecurity_falcosidekick_falco_events_total{priority=\"Critical\"}[5m]) * 60", "legendFormat": "Critical"},
-            {"expr": "rate(falcosecurity_falcosidekick_falco_events_total{priority=\"Error\"}[5m]) * 60", "legendFormat": "Error"},
-            {"expr": "rate(falcosecurity_falcosidekick_falco_events_total{priority=\"Warning\"}[5m]) * 60", "legendFormat": "Warning"},
-            {"expr": "rate(falcosecurity_falcosidekick_falco_events_total{priority=\"Notice\"}[5m]) * 60", "legendFormat": "Notice"}
+            {"expr": "rate(falcosecurity_falcosidekick_falco_events_total{priority_raw=\"critical\"}[5m]) * 60", "legendFormat": "Critical"},
+            {"expr": "rate(falcosecurity_falcosidekick_falco_events_total{priority_raw=\"error\"}[5m]) * 60", "legendFormat": "Error"},
+            {"expr": "rate(falcosecurity_falcosidekick_falco_events_total{priority_raw=\"warning\"}[5m]) * 60", "legendFormat": "Warning"},
+            {"expr": "rate(falcosecurity_falcosidekick_falco_events_total{priority_raw=\"notice\"}[5m]) * 60", "legendFormat": "Notice"}
           ]
         },
         {

@@ -1,0 +1,61 @@
+---
+# Expose ArgoCD server metrics port (8083) as a Kubernetes Service
+# so Prometheus can scrape argocd_app_info, argocd_app_sync_total, etc.
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server-metrics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: argocd-server
+    app.kubernetes.io/part-of: argocd
+spec:
+  selector:
+    app.kubernetes.io/name: argocd-server
+  ports:
+    - name: metrics
+      port: 8083
+      targetPort: 8083
+      protocol: TCP
+---
+# Expose ArgoCD application controller metrics (port 8082)
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-application-controller-metrics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/component: application-controller
+    app.kubernetes.io/name: argocd-application-controller
+    app.kubernetes.io/part-of: argocd
+spec:
+  selector:
+    app.kubernetes.io/name: argocd-application-controller
+  ports:
+    - name: metrics
+      port: 8082
+      targetPort: 8082
+      protocol: TCP
+---
+# ServiceMonitor — scrape ArgoCD server + application controller metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - argocd
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/part-of
+        operator: In
+        values: [argocd]
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

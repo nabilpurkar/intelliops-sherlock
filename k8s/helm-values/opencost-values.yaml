@@ -19,7 +19,7 @@ opencost:
       enabled: false
     external:
       enabled: true
-      url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+      url: "http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
 
   ui:
     enabled: true
@@ -37,7 +37,7 @@ opencost:
     serviceMonitor:
       enabled: true
       additionalLabels:
-        release: kube-prometheus-stack
+        release: prometheus
 
   # Grafana dashboard auto-provisioned via ConfigMap (grafana_dashboard=1)
   grafana:
