@@ -141,13 +141,13 @@ jobs:
             sbom-${{ inputs.service }}.spdx.json
           retention-days: 365
 
-      # ── Grype SBOM-based vulnerability scan (second-opinion, report only) ──────
-      - name: Grype SBOM vulnerability scan
+      # ── Grype image scan (second-opinion scanner, report only) ──────────────
+      - name: Grype image vulnerability scan
         uses: anchore/scan-action@v3
         id: grype
         continue-on-error: true
         with:
-          sbom: sbom-${{ inputs.service }}.cdx.json
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-${{ inputs.image_tag }}
           fail-build: false
           severity-cutoff: critical
           output-format: sarif
