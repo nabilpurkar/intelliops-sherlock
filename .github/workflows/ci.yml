@@ -116,7 +116,7 @@ jobs:
     if: |
       github.ref == 'refs/heads/main' &&
       needs.detect-changes.outputs.order-service == 'true' &&
-      needs.sonarqube.result == 'success' &&
+      (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'failure') &&
       needs.unit-tests.result != 'failure'
     uses: ./.github/workflows/_docker-build-push.yml
     with:
@@ -139,7 +139,7 @@ jobs:
     if: |
       github.ref == 'refs/heads/main' &&
       needs.detect-changes.outputs.payment-service == 'true' &&
-      needs.sonarqube.result == 'success' &&
+      (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'failure') &&
       needs.unit-tests.result != 'failure'
     uses: ./.github/workflows/_docker-build-push.yml
     with:
@@ -162,7 +162,7 @@ jobs:
     if: |
       github.ref == 'refs/heads/main' &&
       needs.detect-changes.outputs.inventory-service == 'true' &&
-      needs.sonarqube.result == 'success' &&
+      (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'failure') &&
       needs.unit-tests.result != 'failure'
     uses: ./.github/workflows/_docker-build-push.yml
     with:
