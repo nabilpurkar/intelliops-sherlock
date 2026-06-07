@@ -1,5 +1,17 @@
 ---
 apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-team
+  description: Platform engineering team responsible for IntelliOps Sherlock infrastructure and services
+spec:
+  type: team
+  profile:
+    displayName: Platform Team
+  children: []
+
+---
+apiVersion: backstage.io/v1alpha1
 kind: System
 metadata:
   name: intelliops-sherlock
