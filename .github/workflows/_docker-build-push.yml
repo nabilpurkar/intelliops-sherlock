@@ -153,7 +153,7 @@ jobs:
           output-format: sarif
 
       - uses: github/codeql-action/upload-sarif@v3
-        if: always() && steps.grype.outputs.sarif != ''
+        if: always() && steps.grype.outcome == 'success'
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: grype-${{ inputs.service }}
