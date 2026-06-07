@@ -49,7 +49,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         return response
 
 
-app = FastAPI(title="payment-service", version="1.2.0")
+app = FastAPI(title="payment-service", version="1.2.1")
 app.add_middleware(MetricsMiddleware)
 FastAPIInstrumentor.instrument_app(app)
 
