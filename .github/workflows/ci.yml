@@ -1,8 +1,8 @@
 name: CI — Platform
 
-# Platform repo pipeline: secret scanning + SAST + SCA + SonarQube + IaC + unit tests.
-# Service and AIOps builds run in their own repos and dispatch back here
-# via repository_dispatch → _manifest-update.yml.
+# Full pipeline: security scan → build → push ECR → update manifest → ArgoCD sync → DAST
+# Security stages run on every push/PR.
+# Build + deploy stages run on main branch only, per service that changed.
 
 on:
   push:
@@ -18,15 +18,21 @@ concurrency:
 permissions:
   contents: read
   security-events: write
+  id-token: write      # required for OIDC → ECR push in build jobs
+  attestations: write  # required for SLSA provenance
 
 jobs:
 
+  # ── Detect what changed ───────────────────────────────────────────────────
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      terraform: ${{ steps.filter.outputs.terraform }}
-      services:  ${{ steps.filter.outputs.services }}
-      k8s:       ${{ steps.filter.outputs.k8s }}
+      terraform:         ${{ steps.filter.outputs.terraform }}
+      services:          ${{ steps.filter.outputs.services }}
+      k8s:               ${{ steps.filter.outputs.k8s }}
+      order-service:     ${{ steps.filter.outputs.order-service }}
+      payment-service:   ${{ steps.filter.outputs.payment-service }}
+      inventory-service: ${{ steps.filter.outputs.inventory-service }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -40,14 +46,20 @@ jobs:
             k8s:
               - 'k8s/**'
               - '.github/workflows/**'
+            order-service:
+              - 'services/order-service/**'
+            payment-service:
+              - 'services/payment-service/**'
+            inventory-service:
+              - 'services/inventory-service/**'
 
-  # ── Stage 1: Secret scanning (always, parallel) ───────────────────────────────
+  # ── Stage 1: Secret scanning (always, blocks everything) ─────────────────
   gitleaks:
     uses: ./.github/workflows/_gitleaks.yml
     permissions:
       contents: read
 
-  # ── Stage 2: SAST — Semgrep (always, after gitleaks) ─────────────────────────
+  # ── Stage 2: SAST — Semgrep (always, after gitleaks) ─────────────────────
   sast:
     needs: [gitleaks]
     uses: ./.github/workflows/_sast.yml
@@ -57,7 +69,7 @@ jobs:
       contents: read
       security-events: write
 
-  # ── Stage 3a: Unit tests (when services/ changed) ─────────────────────────────
+  # ── Stage 3a: Unit tests (when any service/ changed) ─────────────────────
   unit-tests:
     needs: [detect-changes, gitleaks]
     if: needs.detect-changes.outputs.services == 'true'
@@ -65,7 +77,7 @@ jobs:
     permissions:
       contents: read
 
-  # ── Stage 3b: SCA — Trivy + OWASP Dependency-Check (always) ─────────────────
+  # ── Stage 3b: SCA — Trivy + OWASP Dependency-Check (always) ─────────────
   sca:
     needs: [gitleaks]
     uses: ./.github/workflows/_sca.yml
@@ -75,7 +87,7 @@ jobs:
       contents: read
       security-events: write
 
-  # ── Stage 4: SonarQube code quality gate (after unit tests produce coverage) ──
+  # ── Stage 4: SonarQube code quality gate ─────────────────────────────────
   sonarqube:
     needs: [sast, sca]
     if: always() && needs.sast.result != 'failure'
@@ -86,14 +98,165 @@ jobs:
     permissions:
       contents: read
 
-  # ── Stage 3c: IaC scan (when terraform/ changed) ─────────────────────────────
+  # ── Stage 3c: IaC scan (when terraform/ changed) ─────────────────────────
   iac-scan:
     needs: [detect-changes, gitleaks]
     if: needs.detect-changes.outputs.terraform == 'true'
     uses: ./.github/workflows/_iac-scan.yml
     secrets:
       defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
-      infracost_api_key: ${{ secrets.INFRACOST_API_KEY }}
+      infracost_api_key:  ${{ secrets.INFRACOST_API_KEY }}
     permissions:
       contents: read
       security-events: write
+
+  # ── Stage 5a: Build + scan + sign + push — order-service ─────────────────
+  build-order:
+    needs: [detect-changes, sonarqube, unit-tests]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.order-service == 'true' &&
+      needs.sonarqube.result == 'success' &&
+      needs.unit-tests.result != 'failure'
+    uses: ./.github/workflows/_docker-build-push.yml
+    with:
+      service:        order-service
+      aws_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+      role_arn:       ${{ vars.ROLE_ARN }}
+      image_tag:      ${{ github.sha }}
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      id-token:       write
+      contents:       read
+      security-events: write
+      packages:       write
+      attestations:   write
+
+  # ── Stage 5b: Build + scan + sign + push — payment-service ───────────────
+  build-payment:
+    needs: [detect-changes, sonarqube, unit-tests]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.payment-service == 'true' &&
+      needs.sonarqube.result == 'success' &&
+      needs.unit-tests.result != 'failure'
+    uses: ./.github/workflows/_docker-build-push.yml
+    with:
+      service:        payment-service
+      aws_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+      role_arn:       ${{ vars.ROLE_ARN }}
+      image_tag:      ${{ github.sha }}
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      id-token:       write
+      contents:       read
+      security-events: write
+      packages:       write
+      attestations:   write
+
+  # ── Stage 5c: Build + scan + sign + push — inventory-service ─────────────
+  build-inventory:
+    needs: [detect-changes, sonarqube, unit-tests]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.inventory-service == 'true' &&
+      needs.sonarqube.result == 'success' &&
+      needs.unit-tests.result != 'failure'
+    uses: ./.github/workflows/_docker-build-push.yml
+    with:
+      service:        inventory-service
+      aws_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+      role_arn:       ${{ vars.ROLE_ARN }}
+      image_tag:      ${{ github.sha }}
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      id-token:       write
+      contents:       read
+      security-events: write
+      packages:       write
+      attestations:   write
+
+  # ── Stage 6: Update k8s manifests with new image SHA ─────────────────────
+  update-manifests:
+    needs: [detect-changes, build-order, build-payment, build-inventory]
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      (needs.build-order.result == 'success' || needs.build-payment.result == 'success' || needs.build-inventory.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.update.outputs.changed }}
+    env:
+      REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION || 'us-east-1' }}.amazonaws.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+
+      - name: Update image tags in manifests
+        id: update
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          changed=false
+          for entry in \
+            "order-service:${{ needs.build-order.result }}" \
+            "payment-service:${{ needs.build-payment.result }}" \
+            "inventory-service:${{ needs.build-inventory.result }}"; do
+            svc="${entry%%:*}"
+            result="${entry##*:}"
+            [ "${result}" = "success" ] || continue
+            manifest="k8s/apps/${svc}.yaml"
+            new_image="${REGISTRY}/intelliops-dev/${svc}:${{ github.sha }}"
+            sed -i "s|image: ${REGISTRY}/intelliops-dev/${svc}:.*|image: ${new_image}|" "${manifest}"
+            if ! git diff --exit-code "${manifest}" >/dev/null 2>&1; then
+              git add "${manifest}"
+              changed=true
+              echo "  [OK] ${svc} → ${{ github.sha }}"
+            else
+              echo "  [SKIP] ${svc} tag already up to date"
+            fi
+          done
+          if ${changed}; then
+            git commit -m "chore(deploy): update services to ${{ github.sha }}"
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push origin main && break
+              sleep $((RANDOM % 5 + 2))
+            done
+          fi
+          echo "changed=${changed}" >> "$GITHUB_OUTPUT"
+
+  # ── Stage 7: ArgoCD sync — wait for Healthy + Synced ─────────────────────
+  argocd-sync:
+    needs: [update-manifests]
+    if: always() && needs.update-manifests.result == 'success'
+    uses: ./.github/workflows/_argocd-sync.yml
+    with:
+      app_name:     microservices
+      service_name: platform
+    secrets:
+      argocd_auth_token: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+      pushgateway_url:   ${{ secrets.PUSHGATEWAY_URL }}
+    permissions:
+      contents: read
+
+  # ── Stage 8: DAST — OWASP ZAP baseline scan (after deploy) ───────────────
+  dast:
+    needs: [argocd-sync]
+    if: always() && needs.argocd-sync.result == 'success'
+    uses: ./.github/workflows/_dast-scan.yml
+    with:
+      target_url: https://apps.infrastructurepath.online
+      scan_type:  baseline
+    secrets:
+      defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+    permissions:
+      contents:       read
+      security-events: write
+      issues:         write
