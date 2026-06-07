@@ -56,7 +56,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         return response
 
 
-app = FastAPI(title="order-service", version="1.2.2")
+app = FastAPI(title="order-service", version="1.3.0")
 app.add_middleware(MetricsMiddleware)
 FastAPIInstrumentor.instrument_app(app)
 
