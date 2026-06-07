@@ -35,7 +35,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: payment-service
-          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/payment-service:v1.1.0
+          image: 007066145518.dkr.ecr.us-east-1.amazonaws.com/intelliops-dev/payment-service:c0aac045124905c2c1c23f290e078c0c125c2e80
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
