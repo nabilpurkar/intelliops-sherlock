@@ -17,4 +17,4 @@ tempo:
 
   metricsGenerator:
     enabled: true
-    remoteWriteUrl: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+    remoteWriteUrl: "http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"

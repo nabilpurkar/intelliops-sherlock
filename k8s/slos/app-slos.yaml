@@ -14,7 +14,7 @@ metadata:
   name: app-slo-recording-rules
   namespace: monitoring
   labels:
-    release: kube-prometheus-stack
+    release: prometheus
     app: kube-prometheus-stack
 spec:
   groups:
@@ -187,7 +187,7 @@ metadata:
   name: app-slo-alerts
   namespace: monitoring
   labels:
-    release: kube-prometheus-stack
+    release: prometheus
     app: kube-prometheus-stack
 spec:
   groups:
