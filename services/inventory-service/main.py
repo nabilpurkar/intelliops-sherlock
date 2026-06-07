@@ -48,7 +48,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         return response
 
 
-app = FastAPI(title="inventory-service")
+app = FastAPI(title="inventory-service", version="1.2.0")
 app.add_middleware(MetricsMiddleware)
 FastAPIInstrumentor.instrument_app(app)
 

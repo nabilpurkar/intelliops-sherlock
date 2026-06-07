@@ -36,8 +36,8 @@ CPU_STRESS     = Gauge("order_cpu_stress_active", "1 if CPU stress is active")
 
 ACTIVE_ORDERS.set(random.randint(20, 150))
 
-INVENTORY_URL = os.getenv("INVENTORY_SERVICE_URL", "http://inventory-service:8001")
-PAYMENT_URL   = os.getenv("PAYMENT_SERVICE_URL",   "http://payment-service:8002")
+INVENTORY_URL = os.getenv("INVENTORY_SERVICE_URL", "http://inventory-service:8000")
+PAYMENT_URL   = os.getenv("PAYMENT_SERVICE_URL",   "http://payment-service:8000")
 
 # Chaos state
 _leaked_memory: list = []
