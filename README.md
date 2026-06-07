@@ -242,6 +242,9 @@ intelliops-sherlock/
 | 12 | [Cost & AWS Console Guide](docs/12-cost-aws-guide.md) | 30 min | Every AWS resource + where to find it |
 | 13 | [Troubleshooting](docs/13-troubleshooting.md) | Reference | Real error messages + exact fixes |
 | 14 | [Chaos & Load Testing](docs/14-chaos-load-testing.md) | 60 min | Locust scenarios, chaos endpoints, where to watch |
+| 15 | [Adding a New Service](docs/15-add-new-service.md) | 45 min | Full guide: code → ECR → K8s → CI/CD → secure → observe |
+| 16 | [Adding Helm Charts](docs/16-helm-charts.md) | 30 min | Vendor, values, ArgoCD Application, upgrades |
+| 17 | [One-Click Automation](docs/17-one-click-automation.md) | 20 min | What's automated, what's manual, day-2 ops |
 
 ---
 
