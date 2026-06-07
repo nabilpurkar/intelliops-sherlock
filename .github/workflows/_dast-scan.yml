@@ -33,7 +33,7 @@ jobs:
       - name: ZAP Baseline Scan (passive)
         if: inputs.scan_type == 'baseline'
         continue-on-error: true
-        uses: zaproxy/action-baseline@v0.12.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: ${{ inputs.target_url }}
           rules_file_name: .zap/rules.tsv
@@ -45,7 +45,7 @@ jobs:
       - name: ZAP Full Scan (active + passive)
         if: inputs.scan_type == 'full'
         continue-on-error: true
-        uses: zaproxy/action-full-scan@v0.10.0
+        uses: zaproxy/action-full-scan@v0.13.0
         with:
           target: ${{ inputs.target_url }}
           rules_file_name: .zap/rules.tsv
